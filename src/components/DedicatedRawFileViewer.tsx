@@ -24,6 +24,7 @@ import * as XLSX from 'xlsx';
 import { parseDocxBinary, DocxParsedPage, DocxElement } from '../utils/docxParser';
 import { getSafeGoogleDrivePreviewUrl, openAuthenticFileInNewTab } from '../utils/fileViewer';
 import { getActivePreviewFromIndexedDb, getFileFromIndexedDb } from '../utils/indexedFileStore';
+import { getFileBase64FromGas } from '../services/googleDriveService';
 
 /**
  * Enhanced helper to split text preview content into structured A4 pages
@@ -687,6 +688,15 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
                   }
                   rawBase64 = btoa(bStr);
                 }
+              }
+            } catch {}
+          }
+          if (!rawBase64 && file.driveFileId) {
+            try {
+              const gasData = await getFileBase64FromGas(file.driveFileId);
+              if (gasData?.base64) {
+                rawBase64 = gasData.base64;
+                if (gasData.mimeType) mimeType = gasData.mimeType;
               }
             } catch {}
           }

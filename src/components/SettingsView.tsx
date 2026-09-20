@@ -23,6 +23,12 @@ import {
 import { User, SchoolProfile } from '../types';
 import { storage } from '../services/storageService';
 import { GOOGLE_APPS_SCRIPT_CODE } from '../services/gasCodeGenerator';
+import { 
+  getActiveGasUrl, 
+  setActiveGasUrl, 
+  testGasConnection, 
+  ROOT_DRIVE_FOLDER_ID 
+} from '../services/googleDriveService';
 import Swal from 'sweetalert2';
 
 interface SettingsViewProps {
@@ -68,6 +74,69 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [profileAvatarUrl, setProfileAvatarUrl] = useState(currentUser?.avatarUrl || '');
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [avatarProgress, setAvatarProgress] = useState(0);
+
+  // Google Apps Script Connection Form
+  const [gasUrlInput, setGasUrlInput] = useState(getActiveGasUrl());
+  const [isTestingGas, setIsTestingGas] = useState(false);
+  const [gasTestStatus, setGasTestStatus] = useState<{
+    tested: boolean;
+    success: boolean;
+    folderName?: string;
+    folderId?: string;
+    driveUrl?: string;
+    message?: string;
+  } | null>(null);
+
+  const handleSaveAndTestGasUrl = async () => {
+    const trimmed = gasUrlInput.trim();
+    if (!trimmed) {
+      Swal.fire('ข้อผิดพลาด', 'กรุณาระบุ URL ของ Google Apps Script Web App', 'error');
+      return;
+    }
+    setActiveGasUrl(trimmed);
+    setIsTestingGas(true);
+    setGasTestStatus(null);
+    try {
+      const result = await testGasConnection(trimmed);
+      setGasTestStatus({
+        tested: true,
+        success: result.success,
+        folderName: result.folderName,
+        folderId: result.folderId,
+        driveUrl: result.driveUrl,
+        message: result.message,
+      });
+      if (result.success) {
+        Swal.fire({
+          icon: 'success',
+          title: 'เชื่อมต่อ Google Drive สำเร็จ 100%!',
+          html: `<div class="text-left text-xs text-slate-700 space-y-2">
+            <p>🟢 <b>สถานะ:</b> เชื่อมต่อ Google Drive เรียบร้อย</p>
+            <p>📁 <b>ชื่อโฟลเดอร์:</b> ${result.folderName || 'โฟลเดอร์หลัก'}</p>
+            <p>🆔 <b>Folder ID:</b> <code class="font-mono text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded">${result.folderId || ROOT_DRIVE_FOLDER_ID}</code></p>
+            <p class="text-emerald-700 font-medium">✨ ระบบพร้อมอัปโหลดไฟล์, ลบไฟล์อัตโนมัติ, แสดงตัวอย่าง (ไอคอนตา) และดาวน์โหลดตรงแล้ว</p>
+          </div>`,
+          confirmButtonColor: '#7C3AED',
+        });
+      } else {
+        Swal.fire({
+          icon: 'warning',
+          title: 'ยังไม่สามารถเชื่อมต่อได้',
+          text: result.message,
+          confirmButtonColor: '#7C3AED',
+        });
+      }
+    } catch (err: any) {
+      setGasTestStatus({
+        tested: true,
+        success: false,
+        message: err.message,
+      });
+      Swal.fire('ข้อผิดพลาด', err.message, 'error');
+    } finally {
+      setIsTestingGas(false);
+    }
+  };
 
   // Handle Save School Info
   const handleSaveSchoolInfo = (e: React.FormEvent) => {
@@ -1038,18 +1107,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
 
           {/* Card 2: Google Apps Script (Code.gs) for Google Drive */}
-          <div className="bg-white rounded-2xl p-6 border border-purple-100 shadow-xs space-y-5">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+          <div className="bg-white rounded-2xl p-6 border border-purple-100 shadow-xs space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-3">
               <div className="flex items-center space-x-3">
                 <div className="p-2.5 rounded-xl bg-purple-100 text-purple-700">
                   <FileCode className="w-6 h-6" />
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-slate-900">
-                    โค้ด Google Apps Script (Code.gs) สำหรับ Google Drive
+                    Google Apps Script (Code.gs) & จัดการไฟล์ Google Drive
                   </h3>
                   <p className="text-xs text-slate-500">
-                    จัดเก็บไฟล์ทุกชนิดลง Google Drive (Folder ID: <code className="font-mono text-purple-700 font-bold">1IpsaGJhJqtuYHTLiHmT2kqOe7CBq4as-</code>)
+                    จัดเก็บไฟล์ทุกชนิดลง Google Drive (Folder ID: <code className="font-mono text-purple-700 font-bold">{ROOT_DRIVE_FOLDER_ID}</code>)
                   </p>
                 </div>
               </div>
@@ -1067,25 +1136,132 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     showConfirmButton: false,
                   });
                 }}
-                className="px-4 py-2 rounded-xl bg-purple-100 hover:bg-purple-200 text-purple-800 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-purple-100 hover:bg-purple-200 text-purple-800 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
               >
                 {copiedCode ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-                <span>{copiedCode ? 'คัดลอกแล้ว!' : 'คัดลอกโค้ด Code.gs'}</span>
+                <span>{copiedCode ? 'คัดลอกแล้ว!' : 'คัดลอกโค้ด Code.gs ทั้งหมด'}</span>
               </button>
+            </div>
+
+            {/* 4 Core Features Banner */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="p-3.5 rounded-xl bg-purple-50/80 border border-purple-100 flex items-start gap-2.5">
+                <div className="w-5 h-5 rounded-full bg-purple-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">1</div>
+                <div>
+                  <h5 className="text-xs font-bold text-purple-900">เชื่อมไฟล์ระหว่างเว็บกับ Google Drive</h5>
+                  <p className="text-[11px] text-purple-700 mt-0.5">อัปโหลดไฟล์ทุกชนิด (PDF, DOCX, XLSX, รูปภาพ) ส่งตรงเข้าโฟลเดอร์วิชาการอัตโนมัติ</p>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-rose-50/80 border border-rose-100 flex items-start gap-2.5">
+                <div className="w-5 h-5 rounded-full bg-rose-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">2</div>
+                <div>
+                  <h5 className="text-xs font-bold text-rose-900">ลบไฟล์ใน Google Drive อัตโนมัติ</h5>
+                  <p className="text-[11px] text-rose-700 mt-0.5">เมื่อลบไฟล์บนเว็บไซต์ จะลบใน Drive ทันที และมีระบบป้องกันห้ามลบโฟลเดอร์หลัก</p>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-amber-50/80 border border-amber-100 flex items-start gap-2.5">
+                <div className="w-5 h-5 rounded-full bg-amber-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">3</div>
+                <div>
+                  <h5 className="text-xs font-bold text-amber-900">กดไอคอนตาเพื่อดึงไฟล์พรีวิว</h5>
+                  <p className="text-[11px] text-amber-700 mt-0.5">คลิกรูปตา 👀 จะดึงเนื้อหาและเอกสารจาก Google Drive มาเปิดดูตัวอย่างหน้า A4 ได้ทันที</p>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-blue-50/80 border border-blue-100 flex items-start gap-2.5">
+                <div className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">4</div>
+                <div>
+                  <h5 className="text-xs font-bold text-blue-900">ดาวน์โหลดไฟล์จาก Google Drive ตรง</h5>
+                  <p className="text-[11px] text-blue-700 mt-0.5">คลิกปุ่มดาวน์โหลด 📥 จะดึงไฟล์ต้นฉบับจาก Drive บันทึกลงเครื่องคอมพิวเตอร์ทันที</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Input & Test GAS Web App URL */}
+            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-800">
+                  URL ของ Google Apps Script Web App (ที่ได้หลังกด Deploy):
+                </label>
+                <span className="text-[11px] text-slate-500 font-mono">Execute as: Me | Access: Anyone</span>
+              </div>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <input
+                  type="url"
+                  value={gasUrlInput}
+                  onChange={(e) => setGasUrlInput(e.target.value)}
+                  placeholder="https://script.google.com/macros/s/.../exec"
+                  className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-mono text-slate-800 focus:ring-2 focus:ring-purple-500 focus:outline-none bg-white"
+                />
+                <button
+                  type="button"
+                  onClick={handleSaveAndTestGasUrl}
+                  disabled={isTestingGas}
+                  className="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 shrink-0"
+                >
+                  {isTestingGas ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>กำลังทดสอบเชื่อมต่อ...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>บันทึก &amp; ทดสอบเชื่อมต่อ</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {gasTestStatus && (
+                <div
+                  className={`p-3 rounded-lg text-xs flex items-center justify-between ${
+                    gasTestStatus.success
+                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                      : 'bg-rose-50 text-rose-800 border border-rose-200'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    {gasTestStatus.success ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                    )}
+                    <span>
+                      <b>{gasTestStatus.success ? 'เชื่อมต่อสำเร็จ:' : 'พบปัญหา:'}</b>{' '}
+                      {gasTestStatus.message}
+                    </span>
+                  </div>
+                  {gasTestStatus.driveUrl && (
+                    <a
+                      href={gasTestStatus.driveUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-purple-700 underline font-semibold flex items-center gap-1 shrink-0 ml-2"
+                    >
+                      <span>เปิด Google Drive</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="space-y-3">
               <h4 className="text-xs font-bold text-slate-800">
                 ขั้นตอนการนำโค้ดไปวางใน Google Apps Script:
               </h4>
-              <ol className="list-decimal list-inside text-xs text-slate-600 space-y-1 leading-relaxed">
+              <ol className="list-decimal list-inside text-xs text-slate-600 space-y-1.5 leading-relaxed">
                 <li>เปิดเว็บไซต์ <a href="https://script.google.com" target="_blank" rel="noopener noreferrer" className="text-purple-600 underline font-semibold">https://script.google.com</a> แล้วกด <b>+ โครงการใหม่ (+ New project)</b></li>
                 <li>ลบโค้ดเดิมในไฟล์ <code className="font-mono bg-slate-100 px-1 py-0.5 rounded text-purple-700">Code.gs</code> ออกทั้งหมด แล้ววางโค้ดที่คัดลอกจากกล่องด้านล่างลงไป</li>
                 <li>กดปุ่มบันทึก 💾 (Ctrl+S)</li>
                 <li>กดปุ่มสีน้ำเงิน <b>"การทำให้ใช้งานได้" (Deploy) &gt; "การทำให้ใช้งานได้รายการใหม่" (New deployment)</b></li>
                 <li>เลือกประเภท ⚙️ เป็น <b>"เว็บแอป" (Web app)</b></li>
+                <li>ตั้งค่า: <b>"ดำเนินการในฐานะ" (Execute as)</b> เลือกเป็น <b>"ฉัน" (Me)</b></li>
                 <li>ตั้งค่าสำคัญมาก: <b>"ผู้ที่มีสิทธิ์เข้าถึง" (Who has access)</b> เลือกเป็น <b>"ทุกคน" (Anyone)</b></li>
                 <li>กดปุ่ม <b>"ทำให้ใช้งานได้" (Deploy)</b> และอนุญาตสิทธิ์เข้าถึง (Authorize)</li>
+                <li>คัดลอก URL ของเว็บแอป (ลงท้ายด้วย <code>/exec</code>) มาวางในช่องด้านบนแล้วกด <b>"บันทึก &amp; ทดสอบเชื่อมต่อ"</b></li>
               </ol>
             </div>
 

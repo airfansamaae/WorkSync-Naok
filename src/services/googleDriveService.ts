@@ -4,6 +4,104 @@ export const ROOT_DRIVE_FOLDER_ID = '1IpsaGJhJqtuYHTLiHmT2kqOe7CBq4as-';
 export const CONNECTED_GAS_URL =
   'https://script.google.com/macros/s/AKfycbw0hwSkVP5G5LrApTO-W4JmJ3P53mKRyXV_05SEHhOKqLW5LR_BjnNAuj0yNFxEF0R_/exec';
 
+export function getActiveGasUrl(): string {
+  if (typeof window !== 'undefined') {
+    const custom = localStorage.getItem('gas_web_app_url');
+    if (custom && custom.trim().startsWith('http')) {
+      return custom.trim();
+    }
+  }
+  return CONNECTED_GAS_URL;
+}
+
+export function setActiveGasUrl(url: string): void {
+  if (typeof window !== 'undefined') {
+    if (url && url.trim()) {
+      localStorage.setItem('gas_web_app_url', url.trim());
+    } else {
+      localStorage.removeItem('gas_web_app_url');
+    }
+  }
+}
+
+export async function testGasConnection(targetUrl?: string): Promise<{
+  success: boolean;
+  folderName?: string;
+  folderId?: string;
+  driveUrl?: string;
+  message: string;
+}> {
+  const urlToTest = (targetUrl || getActiveGasUrl()).trim();
+  if (!urlToTest) {
+    return { success: false, message: 'กรุณาระบุ URL ของ Google Apps Script Web App' };
+  }
+
+  try {
+    const separator = urlToTest.includes('?') ? '&' : '?';
+    const pingUrl = `${urlToTest}${separator}action=ping&_t=${Date.now()}`;
+    const res = await fetch(pingUrl, {
+      method: 'GET',
+      redirect: 'follow',
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.status === 'success') {
+        return {
+          success: true,
+          folderName: data.folderName || 'โฟลเดอร์หลัก',
+          folderId: data.folderId || ROOT_DRIVE_FOLDER_ID,
+          driveUrl: data.driveUrl || `https://drive.google.com/drive/folders/${data.folderId || ROOT_DRIVE_FOLDER_ID}`,
+          message: data.message || 'เชื่อมต่อ Google Drive สำเร็จ',
+        };
+      }
+    }
+    return {
+      success: false,
+      message: 'ไม่สามารถรับข้อมูลจาก Google Apps Script ได้ ตรวจสอบว่าตั้งค่า "Who has access: Anyone" แล้วหรือไม่',
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      message: err.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อ Google Apps Script',
+    };
+  }
+}
+
+export async function getFileBase64FromGas(fileId: string): Promise<{
+  base64: string;
+  mimeType: string;
+  fileName: string;
+} | null> {
+  if (!fileId || fileId.startsWith('mock_') || fileId.startsWith('drive_local_')) return null;
+
+  const gasUrl = getActiveGasUrl();
+  if (!gasUrl) return null;
+
+  try {
+    const separator = gasUrl.includes('?') ? '&' : '?';
+    const fetchUrl = `${gasUrl}${separator}action=getFileBase64&fileId=${encodeURIComponent(fileId)}&_t=${Date.now()}`;
+    const res = await fetch(fetchUrl, {
+      method: 'GET',
+      redirect: 'follow',
+    });
+
+    if (res.ok) {
+      const json = await res.json();
+      if (json && json.status === 'success' && json.base64) {
+        return {
+          base64: json.base64,
+          mimeType: json.mimeType || 'application/octet-stream',
+          fileName: json.fileName || 'file',
+        };
+      }
+    }
+  } catch (e) {
+    console.warn('[googleDriveService] getFileBase64FromGas warning:', e);
+  }
+  return null;
+}
+
 export interface DriveUploadResult {
   fileId: string;
   viewUrl: string;
@@ -86,7 +184,8 @@ export async function uploadFileToGoogleDrive(
 
   // METHOD 2: Direct Google Apps Script Web App Upload (100% works from any domain / Cloudflare without CORS issues)
   try {
-    const gasRes = await fetch(CONNECTED_GAS_URL, {
+    const targetGasUrl = getActiveGasUrl();
+    const gasRes = await fetch(targetGasUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify({

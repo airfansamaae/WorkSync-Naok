@@ -15,6 +15,8 @@ import {
   uploadFileToGoogleDrive, 
   ROOT_DRIVE_FOLDER_ID, 
   CONNECTED_GAS_URL, 
+  getActiveGasUrl,
+  getFileBase64FromGas,
   createGoogleDriveSubfolder, 
   deleteFileFromGoogleDrive as deleteFromGoogleDriveApi 
 } from './googleDriveService';
@@ -399,6 +401,24 @@ export async function triggerDirectDownload(file: UploadedFile): Promise<boolean
       saveBlobDirectly(blob, originalFileName);
       notifySuccess();
       return true;
+    }
+  }
+
+  // Tier 7.5: Google Apps Script Backend Raw Retrieval for Google Drive Files
+  const driveIdForGas = file.driveFileId || '';
+  if (driveIdForGas && !driveIdForGas.startsWith('mock_') && !driveIdForGas.startsWith('drive_local_')) {
+    try {
+      const gasData = await getFileBase64FromGas(driveIdForGas);
+      if (gasData?.base64) {
+        const blob = base64ToBlob(gasData.base64, gasData.mimeType || targetMime);
+        if (blob && blob.size > 0) {
+          saveBlobDirectly(blob, originalFileName);
+          notifySuccess();
+          return true;
+        }
+      }
+    } catch (gasDlErr) {
+      console.warn('[triggerDirectDownload] GAS download lookup warning:', gasDlErr);
     }
   }
 
@@ -1625,37 +1645,45 @@ export class StorageService {
   // Automatic Google Drive Batch File Deletion via Google Apps Script (Fast & Safe - Never deletes folders)
   public async deleteFilesFromGoogleDrive(fileIds: string[]): Promise<boolean> {
     try {
-      const defaultGasUrl = 'https://script.google.com/macros/s/AKfycbw0hwSkVP5G5LrApTO-W4JmJ3P53mKRyXV_05SEHhOKqLW5LR_BjnNAuj0yNFxEF0R_/exec';
-      const gasUrl = defaultGasUrl;
-      const validIds = fileIds.filter(id => id && !id.startsWith('mock_'));
+      const gasUrl = getActiveGasUrl();
+      const validIds = fileIds.filter(id => id && !id.startsWith('mock_') && !id.startsWith('drive_local_') && id !== ROOT_DRIVE_FOLDER_ID);
       
       if (gasUrl && validIds.length > 0) {
-        // Direct fetch to Google Apps Script
+        // 1. Direct fetch to Google Apps Script (POST)
         try {
           await fetch(gasUrl, {
             method: 'POST',
-            mode: 'no-cors',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'text/plain' },
             body: JSON.stringify({
               action: 'deleteFiles',
               fileIds: validIds,
             }),
+            redirect: 'follow',
           });
-          console.log(`[Google Drive Auto-Delete] Deleted ${validIds.length} files from Drive folder 1IpsaGJhJqtuYHTLiHmT2kqOe7CBq4as-`);
+          console.log(`[Google Drive Auto-Delete] Requested deletion of ${validIds.length} files from Drive folder ${ROOT_DRIVE_FOLDER_ID}`);
         } catch (fetchErr) {
           console.warn('[Google Drive Auto-Delete Direct Error]', fetchErr);
         }
 
-        // Also call backend server delete proxy for reliability
+        // 2. Individual safe GET calls as backup
+        for (const singleId of validIds) {
+          try {
+            const sep = gasUrl.includes('?') ? '&' : '?';
+            fetch(`${gasUrl}${sep}action=deleteFile&fileId=${encodeURIComponent(singleId)}`, {
+              method: 'GET',
+              mode: 'no-cors',
+            }).catch(() => {});
+          } catch {}
+        }
+
+        // 3. Also call backend server delete proxy for reliability
         try {
           await fetch('/api/drive/delete', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ fileIds: validIds }),
           });
-        } catch {
-          // ignore server proxy error
-        }
+        } catch {}
       }
       return true;
     } catch (err) {
@@ -1667,35 +1695,42 @@ export class StorageService {
   // Automatic Google Drive Single File Deletion (Direct API + GAS safe fallback)
   public async deleteFileFromGoogleDrive(fileId: string): Promise<boolean> {
     try {
-      if (!fileId || fileId.startsWith('mock_') || fileId.startsWith('drive_local_')) {
+      if (!fileId || fileId.startsWith('mock_') || fileId.startsWith('drive_local_') || fileId === ROOT_DRIVE_FOLDER_ID) {
         return true;
       }
 
-      // 1. Direct Google Drive API deletion via OAuth
+      // 1. Direct Google Drive API deletion via OAuth if authenticated
       try {
         await deleteFromGoogleDriveApi(fileId);
       } catch (e) {
         console.warn('[Google Drive API Delete Warning]', e);
       }
 
-      const defaultGasUrl = 'https://script.google.com/macros/s/AKfycbw0hwSkVP5G5LrApTO-W4JmJ3P53mKRyXV_05SEHhOKqLW5LR_BjnNAuj0yNFxEF0R_/exec';
-      const gasUrl = defaultGasUrl;
-      
+      const gasUrl = getActiveGasUrl();
       if (gasUrl) {
-        // Direct fetch to Google Apps Script
+        // Direct fetch to Google Apps Script (POST)
         try {
           await fetch(gasUrl, {
             method: 'POST',
-            mode: 'no-cors',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'text/plain' },
             body: JSON.stringify({
               action: 'deleteFile',
               fileId: fileId,
             }),
+            redirect: 'follow',
           });
         } catch (fetchErr) {
           console.warn('[Google Drive Auto-Delete Direct Error]', fetchErr);
         }
+
+        // GET fallback
+        try {
+          const sep = gasUrl.includes('?') ? '&' : '?';
+          fetch(`${gasUrl}${sep}action=deleteFile&fileId=${encodeURIComponent(fileId)}`, {
+            method: 'GET',
+            mode: 'no-cors',
+          }).catch(() => {});
+        } catch {}
 
         // Also call backend server delete proxy for reliability
         try {
@@ -1704,9 +1739,7 @@ export class StorageService {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ fileId: fileId }),
           });
-        } catch {
-          // ignore server proxy error
-        }
+        } catch {}
       }
       return true;
     } catch (err) {
@@ -1990,8 +2023,7 @@ export class StorageService {
 
     if (onProgress) onProgress(35);
 
-    const defaultGasUrl = 'https://script.google.com/macros/s/AKfycbw0hwSkVP5G5LrApTO-W4JmJ3P53mKRyXV_05SEHhOKqLW5LR_BjnNAuj0yNFxEF0R_/exec';
-    const gasUrl = defaultGasUrl;
+    const gasUrl = getActiveGasUrl();
     let driveFileId = 'drive_img_' + Date.now();
 
     if (gasUrl) {

@@ -95,9 +95,50 @@ function doGet(e) {
         fileName: file.getName(),
         mimeType: file.getMimeType(),
         size: file.getSize(),
-        viewUrl: file.getUrl(),
+        viewUrl: 'https://drive.google.com/file/d/' + file.getId() + '/view',
+        previewUrl: 'https://drive.google.com/file/d/' + file.getId() + '/preview',
         downloadUrl: 'https://drive.google.com/uc?export=download&id=' + file.getId()
       });
+    }
+
+    // 4. ดึงไฟล์แบบ Base64 สำหรับไอคอนรูปตา (Preview)
+    if (action === 'getFileBase64' || action === 'getFile') {
+      var targetFileId = params.fileId;
+      if (!targetFileId) return jsonResponse({ status: 'error', message: 'Missing fileId' });
+
+      var fileToRead = DriveApp.getFileById(targetFileId);
+      var blob = fileToRead.getBlob();
+      var base64Str = Utilities.base64Encode(blob.getBytes());
+      return jsonResponse({
+        status: 'success',
+        fileId: fileToRead.getId(),
+        fileName: fileToRead.getName(),
+        mimeType: fileToRead.getMimeType(),
+        size: fileToRead.getSize(),
+        base64: base64Str,
+        viewUrl: 'https://drive.google.com/file/d/' + fileToRead.getId() + '/view',
+        previewUrl: 'https://drive.google.com/file/d/' + fileToRead.getId() + '/preview',
+        downloadUrl: 'https://drive.google.com/uc?export=download&id=' + fileToRead.getId()
+      });
+    }
+
+    // 5. ดาวน์โหลดไฟล์เดี่ยวตรง (Direct File Download Stream)
+    if (action === 'download') {
+      var dlFileId = params.fileId;
+      if (!dlFileId) return jsonResponse({ status: 'error', message: 'Missing fileId' });
+      var fileToDl = DriveApp.getFileById(dlFileId);
+      return fileToDl.getBlob();
+    }
+
+    // 6. ลบไฟล์เดี่ยวผ่าน GET (Fallback เมื่อ POST ติด CORS)
+    if (action === 'deleteFile') {
+      var delFileId = params.fileId;
+      if (!delFileId || delFileId === ROOT_FOLDER_ID) {
+        return jsonResponse({ status: 'error', message: 'รหัสไฟล์ไม่ถูกต้องหรือห้ามลบโฟลเดอร์หลัก' });
+      }
+      var fTrash = DriveApp.getFileById(delFileId);
+      fTrash.setTrashed(true);
+      return jsonResponse({ status: 'success', message: 'ลบไฟล์ใน Google Drive สำเร็จ', fileId: delFileId });
     }
 
     // Default HTML response when opened in browser directly
@@ -307,7 +348,30 @@ function doPost(e) {
     }
 
     // =========================================================================
-    // ACTION 5: ทดสอบ Ping ทาง POST
+    // ACTION 5: ดึง Base64 ของไฟล์สำหรับไอคอนรูปตา (Preview)
+    // =========================================================================
+    if (action === 'getFileBase64' || action === 'getFile') {
+      var fetchId = payload.fileId;
+      if (!fetchId) return jsonResponse({ status: 'error', message: 'Missing fileId' });
+
+      var fileToReadPost = DriveApp.getFileById(fetchId);
+      var blobPost = fileToReadPost.getBlob();
+      var base64StrPost = Utilities.base64Encode(blobPost.getBytes());
+      return jsonResponse({
+        status: 'success',
+        fileId: fileToReadPost.getId(),
+        fileName: fileToReadPost.getName(),
+        mimeType: fileToReadPost.getMimeType(),
+        size: fileToReadPost.getSize(),
+        base64: base64StrPost,
+        viewUrl: 'https://drive.google.com/file/d/' + fileToReadPost.getId() + '/view',
+        previewUrl: 'https://drive.google.com/file/d/' + fileToReadPost.getId() + '/preview',
+        downloadUrl: 'https://drive.google.com/uc?export=download&id=' + fileToReadPost.getId()
+      });
+    }
+
+    // =========================================================================
+    // ACTION 6: ทดสอบ Ping ทาง POST
     // =========================================================================
     if (action === 'ping') {
       return jsonResponse({

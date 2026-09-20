@@ -306,6 +306,7 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
         }
         if (!isCancelled) {
           setFile(activeFile);
+          setZoomLevel(100);
           if (initialTitle || resolvedTitle) setAssignmentTitle(initialTitle || resolvedTitle);
           if (initialSubmitter || resolvedSubmitter) setSubmitterName(initialSubmitter || resolvedSubmitter);
         }
@@ -1156,24 +1157,24 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
               <div className="w-full h-full flex-1 flex flex-col p-0 m-0 overflow-hidden bg-slate-900">
                 {blobUrl ? (
                   <object
-                    data={`${blobUrl}#toolbar=1&navpanes=0&scrollbar=1&view=FitH&zoom=100`}
+                    data={`${blobUrl}#toolbar=1&navpanes=0&scrollbar=1&zoom=100`}
                     type="application/pdf"
                     className="w-full h-full flex-1 border-0 bg-white"
                   >
                     <iframe
-                      src={`${blobUrl}#toolbar=1&navpanes=0&scrollbar=1&view=FitH&zoom=100`}
+                      src={`${blobUrl}#toolbar=1&navpanes=0&scrollbar=1&zoom=100`}
                       className="w-full h-full flex-1 border-0 bg-white"
                       title={file.name}
                     />
                   </object>
                 ) : file.id ? (
                   <object
-                    data={`/api/files/raw/${encodeURIComponent(file.id)}#toolbar=1&navpanes=0&scrollbar=1&view=FitH&zoom=100`}
+                    data={`/api/files/raw/${encodeURIComponent(file.id)}#toolbar=1&navpanes=0&scrollbar=1&zoom=100`}
                     type="application/pdf"
                     className="w-full h-full flex-1 border-0 bg-white"
                   >
                     <iframe
-                      src={`/api/files/raw/${encodeURIComponent(file.id)}#toolbar=1&navpanes=0&scrollbar=1&view=FitH&zoom=100`}
+                      src={`/api/files/raw/${encodeURIComponent(file.id)}#toolbar=1&navpanes=0&scrollbar=1&zoom=100`}
                       className="w-full h-full flex-1 border-0 bg-white"
                       title={file.name}
                     />

@@ -430,12 +430,12 @@ export function buildStandardizedA4ViewerHtml(
     rawContentHtml = `
       <div class="a4-raw-embed-container" data-a4-page="1">
         <object
-          data="${pdfUrl}#toolbar=1&navpanes=0&scrollbar=1&view=FitH&zoom=100"
+          data="${pdfUrl}#toolbar=1&navpanes=0&scrollbar=1&zoom=100"
           type="application/pdf"
           style="width: 100%; height: 100%; border: none; display: block;"
         >
           <iframe
-            src="${pdfUrl}#toolbar=1&navpanes=0&scrollbar=1&view=FitH&zoom=100"
+            src="${pdfUrl}#toolbar=1&navpanes=0&scrollbar=1&zoom=100"
             style="width: 100%; height: 100%; border: none; background: #ffffff;"
             title="${fileName}"
           ></iframe>

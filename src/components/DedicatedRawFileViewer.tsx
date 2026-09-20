@@ -892,7 +892,7 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
         /* Authentic A4 Dimensions: 210mm × 297mm (21 × 29.7 ซม.) */
         /* Symmetrical balanced margins: 20mm on all sides so pages are perfectly centered and never skewed/tilted */
         .a4-page-sheet {
-          width: 210mm !important;
+          width: min(100%, 210mm) !important;
           max-width: 100% !important;
           min-height: 297mm !important;
           aspect-ratio: 210 / 297;
@@ -920,7 +920,7 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
           width: 100% !important;
         }
         .docx-wrapper > section.docx {
-          width: 210mm !important;
+          width: min(100%, 210mm) !important;
           max-width: 100% !important;
           min-height: 297mm !important;
           aspect-ratio: 210 / 297;
@@ -1205,7 +1205,7 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
 
             {/* 2. AUTHENTIC WORD DOCX (.docx): Rendered via docx-preview or authentic parsed pages */}
             {isDocx && (
-              <div className="w-full flex-1 flex flex-col items-center py-6 px-4 overflow-y-auto">
+              <div className="w-full flex-1 flex flex-col items-center py-6 px-4">
                 <div
                   ref={docxContainerRef}
                   className={`docx-render-stage w-full flex flex-col items-center select-text transition-transform duration-150 ${

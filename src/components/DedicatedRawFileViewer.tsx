@@ -1021,7 +1021,7 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
                 ไฟล์ต้นฉบับแท้
               </span>
               <span className="hidden sm:inline-flex items-center gap-1 text-purple-300 font-semibold bg-purple-950/60 px-2 py-0.5 rounded-md border border-purple-500/30">
-                A4 (21 × 29.7 ซม.)
+                {isPdf ? 'แสดงเต็มหน้าจอพอดี 100%' : 'A4 (21 × 29.7 ซม.)'}
               </span>
               {submitterName && (
                 <span className="hidden md:inline text-slate-400 border-l border-slate-700 pl-2">
@@ -1064,6 +1064,13 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
               >
                 100%
               </button>
+            </div>
+          )}
+
+          {/* Status badge for PDF */}
+          {isPdf && (
+            <div className="hidden sm:flex items-center bg-purple-950/70 border border-purple-500/40 rounded-xl px-3 py-1.5 text-xs font-semibold text-purple-200">
+              <span>เต็มหน้าจอ 100%</span>
             </div>
           )}
 
@@ -1113,7 +1120,7 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
       <main 
         ref={scrollContainerRef}
         onScroll={handleContainerScroll}
-        className="flex-1 relative overflow-y-auto bg-slate-950 flex flex-col items-center w-full"
+        className={`flex-1 relative ${isPdf ? 'overflow-hidden p-0' : 'overflow-y-auto'} bg-slate-950 flex flex-col items-center w-full h-full`}
       >
         {loading && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/90 z-30 gap-3">
@@ -1144,48 +1151,42 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
 
         {!error && file && (
           <>
-            {/* 1. AUTHENTIC PDF: Displayed in full native viewer formatted in A4 21x29.7cm standard canvas */}
+            {/* 1. AUTHENTIC PDF: Displayed in 100% full-screen fit view */}
             {isPdf && (
-              <div className="w-full flex-1 flex flex-col items-center py-4 px-2 sm:px-4 overflow-y-auto">
+              <div className="w-full h-full flex-1 flex flex-col p-0 m-0 overflow-hidden bg-slate-900">
                 {blobUrl ? (
-                  <div 
-                    className="w-full max-w-[210mm] shadow-2xl rounded-lg overflow-hidden bg-white border border-slate-700/50 flex flex-col my-2"
-                    style={{ height: 'calc(100vh - 110px)', minHeight: '640px' }}
+                  <object
+                    data={`${blobUrl}#toolbar=1&navpanes=0&scrollbar=1&view=FitH&zoom=100`}
+                    type="application/pdf"
+                    className="w-full h-full flex-1 border-0 bg-white"
                   >
-                    <div className="bg-slate-800 text-slate-300 text-xs px-3 py-1.5 flex justify-between items-center border-b border-slate-700 select-none shrink-0">
-                      <span className="font-semibold text-slate-200">เอกสาร PDF ขนาดกระดาษมาตรฐาน A4 (21 × 29.7 ซม.)</span>
-                      <span className="text-slate-400">มาตราส่วน 100%</span>
-                    </div>
-                    <object
-                      data={`${blobUrl || (file.id ? `/api/files/raw/${encodeURIComponent(file.id)}` : '')}#toolbar=1&navpanes=0&scrollbar=1&zoom=100`}
-                      type="application/pdf"
-                      className="w-full flex-1 border-0 bg-white"
-                    >
-                      <iframe
-                        src={`${blobUrl || (file.id ? `/api/files/raw/${encodeURIComponent(file.id)}` : '')}#toolbar=1&navpanes=0&scrollbar=1&zoom=100`}
-                        className="w-full flex-1 border-0 bg-white"
-                        title={file.name}
-                      />
-                    </object>
-                  </div>
-                ) : file.driveFileId || file.viewUrl ? (
-                  <div 
-                    className="w-full max-w-[210mm] shadow-2xl rounded-lg overflow-hidden bg-white border border-slate-700/50 flex flex-col my-2"
-                    style={{ height: 'calc(100vh - 110px)', minHeight: '640px' }}
-                  >
-                    <div className="bg-slate-800 text-slate-300 text-xs px-3 py-1.5 flex justify-between items-center border-b border-slate-700 select-none shrink-0">
-                      <span className="font-semibold text-slate-200">เอกสาร PDF ขนาดกระดาษมาตรฐาน A4 (21 × 29.7 ซม.)</span>
-                      <span className="text-slate-400">Google Drive Preview</span>
-                    </div>
                     <iframe
-                      src={getSafeGoogleDrivePreviewUrl(file) || file.viewUrl}
-                      className="w-full flex-1 border-0 bg-white"
+                      src={`${blobUrl}#toolbar=1&navpanes=0&scrollbar=1&view=FitH&zoom=100`}
+                      className="w-full h-full flex-1 border-0 bg-white"
                       title={file.name}
-                      allow="autoplay"
                     />
-                  </div>
+                  </object>
+                ) : file.id ? (
+                  <object
+                    data={`/api/files/raw/${encodeURIComponent(file.id)}#toolbar=1&navpanes=0&scrollbar=1&view=FitH&zoom=100`}
+                    type="application/pdf"
+                    className="w-full h-full flex-1 border-0 bg-white"
+                  >
+                    <iframe
+                      src={`/api/files/raw/${encodeURIComponent(file.id)}#toolbar=1&navpanes=0&scrollbar=1&view=FitH&zoom=100`}
+                      className="w-full h-full flex-1 border-0 bg-white"
+                      title={file.name}
+                    />
+                  </object>
+                ) : file.driveFileId || file.viewUrl ? (
+                  <iframe
+                    src={getSafeGoogleDrivePreviewUrl(file) || file.viewUrl}
+                    className="w-full h-full flex-1 border-0 bg-white"
+                    title={file.name}
+                    allow="autoplay"
+                  />
                 ) : (
-                  <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-900 rounded-xl max-w-md w-full my-auto border border-slate-800 shadow-xl">
+                  <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-900 rounded-xl max-w-md w-full my-auto border border-slate-800 shadow-xl mx-auto">
                     <FileText className="w-12 h-12 text-rose-400 mb-3" />
                     <p className="text-white font-bold text-base mb-3 text-center">{file.name}</p>
                     <button

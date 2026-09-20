@@ -1605,7 +1605,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                           <button
                             type="button"
                             onClick={() => handlePreviewLocalFile(f)}
-                            title="เปิดดูไฟล์ต้นฉบับในหน้าต่างใหม่"
+                            title="เปิดดูไฟล์ต้นฉบับ (เต็มหน้าจอพอดี 100%)"
                             className="p-1 text-purple-700 hover:bg-purple-100 rounded-lg transition-colors cursor-pointer"
                           >
                             <Eye className="w-3.5 h-3.5" />
@@ -1749,7 +1749,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                           type="button"
                           onClick={() => onOpenFilePreview(file, editingSubmission.assignmentTitle, editingSubmission.memberName)}
                           className="p-1.5 text-purple-600 hover:bg-purple-100 rounded-lg transition-colors cursor-pointer"
-                          title="เปิดดูไฟล์ต้นฉบับในหน้าต่างใหม่"
+                          title="เปิดดูไฟล์ต้นฉบับ (เต็มหน้าจอพอดี 100%)"
                         >
                           <Eye className="w-4 h-4" />
                         </button>
@@ -1951,7 +1951,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                                       onOpenFilePreview(f, memberStatusModalAssignment.title, member.fullName);
                                     }}
                                     className="inline-flex items-center gap-1 px-1.5 py-0.5 font-semibold text-purple-700 hover:bg-purple-50 rounded cursor-pointer"
-                                    title={`เปิดดูไฟล์ต้นฉบับ: ${f.name}`}
+                                    title={`เปิดดูไฟล์ต้นฉบับ (เต็มหน้าจอพอดี 100%): ${f.name}`}
                                   >
                                     <Eye className="w-3.5 h-3.5" />
                                     <span className="max-w-[100px] truncate">{f.name}</span>
@@ -2077,7 +2077,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                                     ? 'text-emerald-800 hover:bg-emerald-50'
                                     : 'text-purple-700 hover:bg-purple-50'
                                 }`}
-                                title={`เปิดดูไฟล์ต้นฉบับ: ${f.name}`}
+                                title={`เปิดดูไฟล์ต้นฉบับ (เต็มหน้าจอพอดี 100%): ${f.name}`}
                               >
                                 <Eye className="w-3.5 h-3.5" />
                                 <span className="max-w-[100px] truncate">{f.name}</span>

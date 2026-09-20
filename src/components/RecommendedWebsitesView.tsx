@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Plus, 
   Edit3, 
@@ -15,7 +15,9 @@ import {
   Sparkles, 
   Image as ImageIcon,
   Loader2,
-  HardDrive
+  HardDrive,
+  Move,
+  GripVertical
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { User, RecommendedWebsite } from '../types';
@@ -56,6 +58,176 @@ export const RecommendedWebsitesView: React.FC<RecommendedWebsitesViewProps> = (
   // State: Modal for "!" Description Pop-up
   const [infoModalWebsite, setInfoModalWebsite] = useState<RecommendedWebsite | null>(null);
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
+
+  // =========================================================================
+  // Drag and Drop / Press & Hold Reordering State (Admin Only)
+  // รองรับทั้งคลิก/กดค้างลากบนคอมพิวเตอร์ และทัชค้างบนหน้าจอมือถือ/แท็บเล็ต
+  // =========================================================================
+  const [localWebsites, setLocalWebsites] = useState<RecommendedWebsite[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+
+  const touchTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const touchStartPos = useRef<{ x: number; y: number } | null>(null);
+  const isTouchDraggingRef = useRef(false);
+  const touchCurrentIndexRef = useRef<number | null>(null);
+  const justDraggedRef = useRef(false);
+  const localWebsitesRef = useRef<RecommendedWebsite[]>([]);
+
+  // ซิงค์ localWebsites กับ websites prop เมื่อไม่ได้กำลังลาก
+  useEffect(() => {
+    if (!isDragging) {
+      const sorted = [...websites].sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
+      setLocalWebsites(sorted);
+      localWebsitesRef.current = sorted;
+    }
+  }, [websites, isDragging]);
+
+  useEffect(() => {
+    localWebsitesRef.current = localWebsites;
+  }, [localWebsites]);
+
+  // ฟังก์ชันสลับลำดับใน Grid แบบเรียลไทม์ (Live Reorder)
+  const reorderList = (fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return;
+    setLocalWebsites((prev) => {
+      const updated = [...prev];
+      const [moved] = updated.splice(fromIndex, 1);
+      updated.splice(toIndex, 0, moved);
+      localWebsitesRef.current = updated;
+      return updated;
+    });
+  };
+
+  // ฟังก์ชันบันทึกลำดับลง Storage เมื่อปล่อยมือ / จบการลาก
+  const commitReorder = (itemsToSave: RecommendedWebsite[]) => {
+    storage.reorderWebsites(itemsToSave);
+    onRefreshWebsites?.();
+    Swal.fire({
+      icon: 'success',
+      title: 'จัดเรียงลำดับใหม่เรียบร้อย',
+      toast: true,
+      position: 'top-end',
+      timer: 1500,
+      showConfirmButton: false,
+    });
+  };
+
+  // HTML5 Drag Handlers (Desktop Mouse)
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    if (!isAdmin) return;
+    setIsDragging(true);
+    setDraggedIndex(index);
+    touchCurrentIndexRef.current = index;
+    try {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(index));
+    } catch {}
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    if (!isAdmin || !isDragging) return;
+    e.preventDefault();
+    try {
+      e.dataTransfer.dropEffect = 'move';
+    } catch {}
+  };
+
+  const handleDragEnter = (targetIndex: number) => {
+    if (!isAdmin || draggedIndex === null || draggedIndex === targetIndex) return;
+    reorderList(draggedIndex, targetIndex);
+    setDraggedIndex(targetIndex);
+    touchCurrentIndexRef.current = targetIndex;
+  };
+
+  const handleDragEnd = () => {
+    if (!isAdmin) return;
+    setIsDragging(false);
+    setDraggedIndex(null);
+    justDraggedRef.current = true;
+    setTimeout(() => {
+      justDraggedRef.current = false;
+    }, 300);
+
+    commitReorder(localWebsitesRef.current);
+  };
+
+  // Touch / Mobile Press & Hold Drag Handlers (กดค้างตรงโลโก้ 200ms แล้วลากขึ้น/ลง/ซ้าย/ขวา)
+  const handleTouchStart = (e: React.TouchEvent, index: number) => {
+    if (!isAdmin) return;
+    const touch = e.touches[0];
+    touchStartPos.current = { x: touch.clientX, y: touch.clientY };
+    touchCurrentIndexRef.current = index;
+
+    if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
+    touchTimerRef.current = setTimeout(() => {
+      isTouchDraggingRef.current = true;
+      setIsDragging(true);
+      setDraggedIndex(index);
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        try {
+          navigator.vibrate(40);
+        } catch {}
+      }
+    }, 200);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isAdmin) return;
+    const touch = e.touches[0];
+
+    // ถ้ายังไม่เริ่มลาก แต่ขยับนิ้วเกิน 10px แปลว่าเป็นการเลื่อนจอปกติ (ยกเลิกตัวจับเวลากดค้าง)
+    if (!isTouchDraggingRef.current) {
+      if (touchStartPos.current) {
+        const dx = Math.abs(touch.clientX - touchStartPos.current.x);
+        const dy = Math.abs(touch.clientY - touchStartPos.current.y);
+        if (dx > 10 || dy > 10) {
+          if (touchTimerRef.current) {
+            clearTimeout(touchTimerRef.current);
+            touchTimerRef.current = null;
+          }
+        }
+      }
+      return;
+    }
+
+    // กำลังลาก: ป้องกันหน้าจอเลื่อนตามนิ้ว
+    if (e.cancelable) {
+      e.preventDefault();
+    }
+
+    // หา element ปลายทางใต้ตำแหน่งนิ้ว
+    const elem = document.elementFromPoint(touch.clientX, touch.clientY);
+    const cardElem = elem?.closest('[data-website-index]');
+    if (cardElem) {
+      const targetIndex = parseInt(cardElem.getAttribute('data-website-index') || '-1', 10);
+      const currentIdx = touchCurrentIndexRef.current;
+      if (targetIndex >= 0 && currentIdx !== null && targetIndex !== currentIdx) {
+        reorderList(currentIdx, targetIndex);
+        touchCurrentIndexRef.current = targetIndex;
+        setDraggedIndex(targetIndex);
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (touchTimerRef.current) {
+      clearTimeout(touchTimerRef.current);
+      touchTimerRef.current = null;
+    }
+
+    if (isTouchDraggingRef.current) {
+      isTouchDraggingRef.current = false;
+      setIsDragging(false);
+      setDraggedIndex(null);
+      justDraggedRef.current = true;
+      setTimeout(() => {
+        justDraggedRef.current = false;
+      }, 350);
+
+      commitReorder(localWebsitesRef.current);
+    }
+  };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -286,41 +458,36 @@ export const RecommendedWebsitesView: React.FC<RecommendedWebsitesViewProps> = (
   // Reorder: Move Left (1 step earlier)
   const handleMoveLeft = (index: number) => {
     if (index <= 0) return;
-    const newList = [...websites];
+    const newList = [...localWebsitesRef.current];
     const temp = newList[index];
     newList[index] = newList[index - 1];
     newList[index - 1] = temp;
-    storage.reorderWebsites(newList);
-    onRefreshWebsites?.();
+    setLocalWebsites(newList);
+    localWebsitesRef.current = newList;
+    commitReorder(newList);
   };
 
   // Reorder: Move Right (1 step later)
   const handleMoveRight = (index: number) => {
-    if (index >= websites.length - 1) return;
-    const newList = [...websites];
+    if (index >= localWebsitesRef.current.length - 1) return;
+    const newList = [...localWebsitesRef.current];
     const temp = newList[index];
     newList[index] = newList[index + 1];
     newList[index + 1] = temp;
-    storage.reorderWebsites(newList);
-    onRefreshWebsites?.();
+    setLocalWebsites(newList);
+    localWebsitesRef.current = newList;
+    commitReorder(newList);
   };
 
   // Reorder: Move to First Row / Top (ตำแหน่งแรกสุด)
   const handleMoveToTop = (index: number) => {
     if (index <= 0) return;
-    const newList = [...websites];
+    const newList = [...localWebsitesRef.current];
     const [targetItem] = newList.splice(index, 1);
     newList.unshift(targetItem);
-    storage.reorderWebsites(newList);
-    onRefreshWebsites?.();
-
-    Swal.fire({
-      icon: 'success',
-      title: 'ย้ายขึ้นแถวแรกเรียบร้อย',
-      text: `นำ "${targetItem.title}" ไปไว้ลำดับแรกสุดแล้ว`,
-      timer: 1200,
-      showConfirmButton: false,
-    });
+    setLocalWebsites(newList);
+    localWebsitesRef.current = newList;
+    commitReorder(newList);
   };
 
   // Handle Open URL safely
@@ -406,19 +573,19 @@ export const RecommendedWebsitesView: React.FC<RecommendedWebsitesViewProps> = (
           )}
         </div>
 
-        {/* Informative Hint for Edit Mode */}
+        {/* Informative Hint for Edit Mode (เฉพาะเมื่อ Admin กดปุ่มจัดการเพื่อแก้ไข) */}
         {isAdmin && isEditMode && (
-          <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-2xl flex items-center gap-2 text-xs text-amber-900">
-            <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+          <div className="mt-4 p-3 bg-purple-50 border border-purple-200 rounded-2xl flex items-center gap-2.5 text-xs text-purple-900 shadow-2xs">
+            <Sparkles className="w-4 h-4 text-purple-600 shrink-0" />
             <span>
-              <b>คำแนะนำ:</b> ท่านสามารถใช้ปุ่ม <b>⬆ แถวแรก</b> เพื่อย้ายเว็บไซต์สำคัญขึ้นมาอยู่แถวบนสุด หรือใช้ลูกศร <b>◀ / ▶</b> เพื่อเลื่อนตำแหน่ง และกด <b>🗑️</b> เพื่อลบ
+              <b>คำแนะนำการจัดการ (Admin):</b> ท่านสามารถกดตรงโลโก้เว็บค้างไว้แล้วลากเลื่อน (ขึ้น-ลง-ซ้าย-ขวา) สลับจัดเรียงตำแหน่งได้อย่างอิสระ หรือใช้ปุ่ม <b>⬆ แถวแรก</b> / <b>◀ / ▶</b> และกด <b>🗑️</b> เพื่อลบ
             </span>
           </div>
         )}
       </div>
 
       {/* Grid of Recommended Websites (5-6 logos per row on desktop as requested) */}
-      {websites.length === 0 ? (
+      {localWebsites.length === 0 ? (
         <div className="bg-white/80 rounded-3xl border border-purple-200/80 p-12 text-center">
           <Globe className="w-12 h-12 text-purple-300 mx-auto mb-3" />
           <h3 className="text-base font-semibold text-slate-700">ยังไม่มีเว็บไซต์แนะนำ</h3>
@@ -442,17 +609,31 @@ export const RecommendedWebsitesView: React.FC<RecommendedWebsitesViewProps> = (
           id="recommended-websites-grid"
           className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-4 sm:gap-6"
         >
-          {[...websites]
-            .sort((a, b) => (a.order ?? 999) - (b.order ?? 999))
-            .map((website, index) => (
+          {localWebsites.map((website, index) => (
             <div
               key={website.id}
+              data-website-index={index}
+              data-website-id={website.id}
+              onDragOver={(e) => handleDragOver(e, index)}
+              onDragEnter={() => handleDragEnter(index)}
               className={`group relative flex flex-col items-center p-3 rounded-2xl transition-all duration-200 bg-white/90 border ${
-                isEditMode
+                draggedIndex === index
+                  ? 'border-purple-500 ring-4 ring-purple-400/80 shadow-2xl scale-105 z-30 bg-purple-50/95 rotate-1'
+                  : isDragging
+                  ? 'border-purple-200/80 shadow-2xs'
+                  : isEditMode
                   ? 'border-purple-300 ring-2 ring-purple-100 shadow-sm'
                   : 'border-purple-100 hover:border-purple-300 hover:shadow-md'
               }`}
             >
+              {/* Dragging Active Badge */}
+              {draggedIndex === index && (
+                <div className="absolute -top-3 inset-x-0 mx-auto w-fit z-40 px-2.5 py-0.5 rounded-full bg-purple-600 text-white text-[10px] font-bold shadow-md flex items-center gap-1 animate-pulse pointer-events-none">
+                  <Move className="w-2.5 h-2.5" />
+                  <span>กำลังเลื่อน #{index + 1}</span>
+                </div>
+              )}
+
               {/* Row 1 / Rank Badge in Edit Mode */}
               {isEditMode && (
                 <div className="absolute top-2 left-2 z-10">
@@ -481,18 +662,56 @@ export const RecommendedWebsitesView: React.FC<RecommendedWebsitesViewProps> = (
 
               {/* Square Logo Container (ขนาดเล็ก 4 เหลี่ยม: w-20 h-20 sm:w-22 sm:h-22) */}
               <div
-                onClick={() => {
+                draggable={isAdmin}
+                onDragStart={(e) => handleDragStart(e, index)}
+                onDragOver={(e) => handleDragOver(e, index)}
+                onDragEnter={() => handleDragEnter(index)}
+                onDragEnd={handleDragEnd}
+                onTouchStart={(e) => handleTouchStart(e, index)}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+                onTouchCancel={handleTouchEnd}
+                onClick={(e) => {
+                  if (justDraggedRef.current || isDragging) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    return;
+                  }
                   if (!isEditMode) {
                     handleOpenUrl(website.url);
                   }
                 }}
                 className={`relative w-20 h-20 sm:w-22 sm:h-22 rounded-2xl p-2 bg-slate-50 border border-slate-200/90 shadow-2xs flex items-center justify-center overflow-hidden select-none transition-all duration-200 ${
-                  isEditMode
+                  isAdmin
+                    ? 'cursor-grab active:cursor-grabbing hover:border-purple-400 hover:shadow-md hover:scale-105 bg-gradient-to-br from-white to-purple-50/40'
+                    : isEditMode
                     ? 'cursor-default'
                     : 'cursor-pointer group-hover:scale-105 group-hover:shadow-md group-hover:border-purple-300 bg-gradient-to-br from-white to-purple-50/40'
                 }`}
-                title={isEditMode ? website.title : `คลิกเพื่อเปิด: ${website.title}`}
+                title={
+                  isAdmin
+                    ? `Admin: กดค้างแล้วลากเพื่อจัดเรียงตำแหน่ง (ขึ้น-ลง-ซ้าย-ขวา) หรือคลิกเพื่อเปิด: ${website.title}`
+                    : isEditMode
+                    ? website.title
+                    : `คลิกเพื่อเปิด: ${website.title}`
+                }
               >
+                {/* Admin Move Indicator on Logo (แสดงเฉพาะเมื่ออยู่ในโหมดจัดการ หรือนำเมาส์ชี้ หรือกำลังลาก) */}
+                {isAdmin && (
+                  <div 
+                    className={`absolute top-1 left-1 z-10 p-1 rounded-md transition-all pointer-events-none ${
+                      draggedIndex === index
+                        ? 'bg-purple-600 text-white opacity-100 shadow-sm'
+                        : isEditMode
+                        ? 'bg-purple-600/90 text-white opacity-80 shadow-2xs'
+                        : 'bg-purple-700/80 text-white opacity-0 group-hover:opacity-90 shadow-2xs'
+                    }`}
+                    title="กดค้างที่โลโก้แล้วลากเพื่อย้ายตำแหน่ง"
+                  >
+                    <Move className="w-2.5 h-2.5" />
+                  </div>
+                )}
+
                 {website.imageUrl && !failedImages[`${website.id}_${website.imageUrl}`] ? (
                   <img
                     src={website.imageUrl}
@@ -514,7 +733,7 @@ export const RecommendedWebsitesView: React.FC<RecommendedWebsitesViewProps> = (
                 )}
 
                 {/* Hover subtle link indicator on normal mode */}
-                {!isEditMode && (
+                {!isEditMode && !isAdmin && (
                   <div className="absolute inset-0 bg-purple-900/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-end p-1">
                     <ExternalLink className="w-3 h-3 text-purple-700 bg-white/90 rounded p-0.5 shadow-2xs" />
                   </div>
@@ -523,7 +742,12 @@ export const RecommendedWebsitesView: React.FC<RecommendedWebsitesViewProps> = (
 
               {/* Title Underneath the Logo (ข้างใต้โลโก้เป็นชื่อ) */}
               <div
-                onClick={() => {
+                onClick={(e) => {
+                  if (justDraggedRef.current || isDragging) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    return;
+                  }
                   if (!isEditMode) {
                     handleOpenUrl(website.url);
                   }
@@ -588,7 +812,7 @@ export const RecommendedWebsitesView: React.FC<RecommendedWebsitesViewProps> = (
 
                     <button
                       type="button"
-                      disabled={index === websites.length - 1}
+                      disabled={index === localWebsites.length - 1}
                       onClick={() => handleMoveRight(index)}
                       className="p-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-purple-50 hover:text-purple-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
                       title="เลื่อนไปทางขวา"

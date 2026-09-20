@@ -26,6 +26,7 @@ import {
 } from '../types';
 import { storage, triggerDirectDownload } from '../services/storageService';
 import { ensureGoogleDriveConnected, ROOT_DRIVE_FOLDER_ID } from '../services/googleDriveService';
+import { saveFileToIndexedDb } from '../utils/indexedFileStore';
 import Swal from 'sweetalert2';
 import { formatThaiDate } from '../lib/dateUtils';
 
@@ -55,6 +56,47 @@ export const DocumentCenterView: React.FC<DocumentCenterViewProps> = ({
 
   // Edit document state
   const [editingDoc, setEditingDoc] = useState<DocumentItem | null>(null);
+
+  // Preview selected document file before or during upload with authentic extraction & IndexedDB persistence
+  const handlePreviewSelectedDocFile = async (file: File) => {
+    const dataUrl = await new Promise<string>((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => resolve('');
+      reader.readAsDataURL(file);
+    });
+    let previewType: UploadedFile['previewType'] = 'other';
+    const lower = file.name.toLowerCase();
+    if (lower.endsWith('.pdf')) previewType = 'pdf';
+    else if (lower.match(/\.(png|jpg|jpeg|gif|webp|svg)$/)) previewType = 'image';
+    else if (lower.match(/\.(xlsx|xls|csv)$/)) previewType = 'spreadsheet';
+    else if (lower.match(/\.(pptx|ppt)$/)) previewType = 'presentation';
+    else if (lower.match(/\.(docx|doc)$/)) previewType = 'doc';
+
+    const tempFileId = 'temp_doc_' + Date.now();
+    await saveFileToIndexedDb(tempFileId, dataUrl, file, {
+      name: file.name,
+      size: file.size,
+      mimeType: file.type,
+    });
+
+    const tempUploadedFile: UploadedFile = {
+      id: tempFileId,
+      name: file.name,
+      size: file.size,
+      mimeType: file.type || 'application/octet-stream',
+      driveFileId: 'temp_preview',
+      driveFolderId: ROOT_DRIVE_FOLDER_ID,
+      downloadUrl: '',
+      viewUrl: '',
+      previewType,
+      previewContent: file.name.replace(/\.[^/.]+$/, ''),
+      fileDataUrl: dataUrl,
+      uploadedAt: new Date().toISOString(),
+    };
+
+    onOpenFilePreview(tempUploadedFile, docTitle || file.name, currentUser?.fullName);
+  };
 
   // Handle Add Document
   const handleAddDocument = async (e: React.FormEvent) => {
@@ -351,7 +393,7 @@ export const DocumentCenterView: React.FC<DocumentCenterViewProps> = ({
                 {/* Preview Icon (Opens authentic original file in new window) */}
                 <button
                   onClick={() => onOpenFilePreview(doc.file, doc.title, doc.uploaderName)}
-                  title="เปิดดูไฟล์ต้นฉบับในหน้าต่างใหม่"
+                  title="เปิดดูไฟล์ต้นฉบับในหน้าต่างใหม่ (เต็มหน้าจอพอดี 100%)"
                   className="p-1.5 sm:p-2 text-purple-700 hover:bg-purple-100 rounded-lg transition-colors border border-purple-200 cursor-pointer"
                 >
                   <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
@@ -509,6 +551,31 @@ export const DocumentCenterView: React.FC<DocumentCenterViewProps> = ({
                   }}
                   className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100"
                 />
+
+                {selectedDocFile && (
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-purple-50/70 border border-purple-200 text-xs text-slate-700 mt-2">
+                    <div className="flex items-center gap-2 truncate">
+                      <FileText className="w-4 h-4 text-purple-600 shrink-0" />
+                      <span className="truncate max-w-[200px] sm:max-w-xs font-medium text-slate-800">
+                        {selectedDocFile.name}
+                      </span>
+                      <span className="text-[10px] text-slate-400 shrink-0">
+                        ({(selectedDocFile.size / (1024 * 1024)).toFixed(2)} MB)
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handlePreviewSelectedDocFile(selectedDocFile)}
+                        title="เปิดดูไฟล์ตัวอย่าง (ไอคอนตา - เต็มหน้าจอพอดี 100%)"
+                        className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-purple-700 bg-white hover:bg-purple-100 rounded-lg border border-purple-200 transition-colors cursor-pointer shadow-2xs"
+                      >
+                        <Eye className="w-3.5 h-3.5 text-purple-600" />
+                        <span>ดูตัวอย่าง</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Progress Bar */}

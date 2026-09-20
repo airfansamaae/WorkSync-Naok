@@ -170,20 +170,28 @@ export const STANDARDIZED_A4_CONTAINER_CSS = `
     justify-content: space-between !important;
   }
 
-  /* STANDARDIZED A4 CONTAINER FOR DIRECT RAW EMBEDS (PDF, NATIVE OBJECTS) */
+  /* FULL-SCREEN 100% CONTAINER FOR DIRECT RAW EMBEDS (PDF, NATIVE OBJECTS) */
   .a4-raw-embed-container {
-    width: 210mm !important;
-    max-width: calc(100vw - 32px) !important;
-    height: 297mm !important;
-    min-height: 297mm !important;
-    margin: 24px auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 100% !important;
+    min-height: calc(100vh - 56px) !important;
+    margin: 0 !important;
     padding: 0 !important;
     box-sizing: border-box !important;
     background: #ffffff !important;
-    box-shadow: 0 10px 35px -5px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
-    border-radius: 2px !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
     overflow: hidden !important;
     position: relative !important;
+  }
+
+  .a4-stage-viewport.pdf-stage-viewport {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    height: calc(100vh - 56px) !important;
+    overflow: hidden !important;
   }
 
   /* STANDARDIZED A4 CONTAINER FOR IMAGES */
@@ -422,12 +430,12 @@ export function buildStandardizedA4ViewerHtml(
     rawContentHtml = `
       <div class="a4-raw-embed-container" data-a4-page="1">
         <object
-          data="${pdfUrl}#toolbar=0&navpanes=0&scrollbar=1&zoom=100"
+          data="${pdfUrl}#toolbar=1&navpanes=0&scrollbar=1&view=FitH&zoom=100"
           type="application/pdf"
           style="width: 100%; height: 100%; border: none; display: block;"
         >
           <iframe
-            src="${pdfUrl}#toolbar=0&navpanes=0&scrollbar=1&zoom=100"
+            src="${pdfUrl}#toolbar=1&navpanes=0&scrollbar=1&view=FitH&zoom=100"
             style="width: 100%; height: 100%; border: none; background: #ffffff;"
             title="${fileName}"
           ></iframe>
@@ -589,7 +597,7 @@ export function buildStandardizedA4ViewerHtml(
   <header class="a4-viewer-header">
     <div class="file-meta">
       <div class="file-title" title="${fileName}">${fileName}</div>
-      <div class="a4-badge">ขนาด A4 (210 × 297 มม.) • Font: TH Sarabun</div>
+      <div class="a4-badge">${isPdf ? 'แสดงเต็มหน้าจอพอดี แบบ 100%' : 'ขนาด A4 (210 × 297 มม.) • Font: TH Sarabun'}</div>
     </div>
     <div class="header-actions">
       <button id="btn-single-download" class="btn-single-download" onclick="downloadRawFile()">
@@ -611,7 +619,7 @@ export function buildStandardizedA4ViewerHtml(
   </header>
 
   <!-- STANDARDIZED A4 VIEWPORT STAGE -->
-  <main id="a4-viewport" class="a4-stage-viewport">
+  <main id="a4-viewport" class="a4-stage-viewport ${isPdf ? 'pdf-stage-viewport' : ''}">
     ${rawContentHtml}
   </main>
 

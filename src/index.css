@@ -1,0 +1,106 @@
+@import "tailwindcss";
+
+@layer utilities {
+  .glow-purple {
+    box-shadow: 0 0 18px rgba(139, 92, 246, 0.5), 0 0 4px rgba(124, 58, 237, 0.3);
+  }
+  .glow-purple-hover:hover {
+    box-shadow: 0 0 22px rgba(139, 92, 246, 0.65), 0 0 8px rgba(124, 58, 237, 0.45);
+    transform: translateY(-1px);
+  }
+  .glow-emerald-hover:hover {
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.5), 0 0 6px rgba(5, 150, 105, 0.4);
+    transform: translateY(-1px);
+  }
+  .glow-amber-hover:hover {
+    box-shadow: 0 0 20px rgba(245, 158, 11, 0.5), 0 0 6px rgba(217, 119, 6, 0.4);
+    transform: translateY(-1px);
+  }
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* SweetAlert2 Prompt Font override */
+.swal2-popup {
+  font-family: 'Prompt', sans-serif !important;
+  border-radius: 1rem !important;
+}
+.swal2-title {
+  font-family: 'Prompt', sans-serif !important;
+  font-weight: 600 !important;
+}
+.swal2-html-container {
+  font-family: 'Prompt', sans-serif !important;
+}
+
+/* Authentic TH Sarabun Font Setup */
+@font-face {
+  font-family: 'TH Sarabun New';
+  src: local('TH Sarabun New'), local('THSarabunNew'), local('Sarabun'), url('https://fonts.gstatic.com/s/sarabun/v14/DtVkJxOVoTKUq7CcsQ8.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'TH Sarabun New';
+  src: local('TH Sarabun New Bold'), local('THSarabunNew-Bold'), local('Sarabun-Bold'), url('https://fonts.gstatic.com/s/sarabun/v14/DtVlJxOVoTKUq7CcsQ_LR4qG.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'TH Sarabun PSK';
+  src: local('TH Sarabun PSK'), local('THSarabunPSK'), local('Sarabun'), url('https://fonts.gstatic.com/s/sarabun/v14/DtVkJxOVoTKUq7CcsQ8.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+/* Authentic A4 Document Classes (Strict A4 210 x 297 mm, Margins Top 25mm, Bottom 20mm, Left 25mm, Right 20mm) */
+.font-sarabun {
+  font-family: 'TH Sarabun New', 'TH Sarabun PSK', 'Sarabun', Tahoma, sans-serif !important;
+}
+
+.a4-page-sheet {
+  width: 210mm !important;
+  min-height: 297mm !important;
+  margin: 24px auto !important;
+  padding: 25mm 20mm 20mm 25mm !important;
+  background: #ffffff !important;
+  color: #111827 !important;
+  box-shadow: 0 12px 35px -5px rgba(0, 0, 0, 0.5), 0 4px 12px -2px rgba(0, 0, 0, 0.3) !important;
+  box-sizing: border-box !important;
+  font-family: 'TH Sarabun New', 'TH Sarabun PSK', 'Sarabun', Tahoma, sans-serif !important;
+  font-size: 16pt !important;
+  line-height: 1.6 !important;
+}
+
+@media print {
+  body {
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  .a4-page-sheet {
+    box-shadow: none !important;
+    margin: 0 !important;
+    width: 210mm !important;
+    min-height: 297mm !important;
+    page-break-after: always !important;
+  }
+}
+
+

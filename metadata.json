@@ -1,0 +1,6 @@
+{
+  "name": "ระบบงานวิชาการ มอบหมายงาน-ส่งงาน และจัดการเอกสาร",
+  "description": "ระบบบริหารงานวิชาการ มอบหมายงาน ส่งงาน ติดตามตรวจงาน ศูนย์เอกสาร และจัดการข้อมูลบุคลากร เชื่อมต่อ Google Drive และ D1",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

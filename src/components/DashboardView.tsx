@@ -14,8 +14,13 @@ import {
   FileCheck2,
   Users,
   CalendarDays,
-  Sparkles
+  Sparkles,
+  Plus,
+  Megaphone
 } from 'lucide-react';
+import Swal from 'sweetalert2';
+import { storage } from '../services/storageService';
+import { DateRangePicker } from './DateRangePicker';
 import { 
   User, 
   Assignment, 
@@ -87,6 +92,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     assignments: Assignment[];
     announcements: Announcement[];
   } | null>(null);
+
+  // Admin Plus Modal State (Create Assignment or Announcement from Calendar)
+  const [isAdminPlusModalOpen, setIsAdminPlusModalOpen] = useState(false);
+  const [adminFormType, setAdminFormType] = useState<'assignment' | 'announcement'>('assignment');
+
+  // Assignment form state
+  const [newTitle, setNewTitle] = useState('');
+  const [newDescription, setNewDescription] = useState('');
+  const [newDueDateStart, setNewDueDateStart] = useState(todayStr);
+  const [newDueDateEnd, setNewDueDateEnd] = useState(todayStr);
+
+  // Announcement form state
+  const [annTitle, setAnnTitle] = useState('');
+  const [annContent, setAnnContent] = useState('');
+  const [annDateStart, setAnnDateStart] = useState(todayStr);
+  const [annDateEnd, setAnnDateEnd] = useState(todayStr);
+  const [annIsUrgent, setAnnIsUrgent] = useState(false);
 
   // 15-Day Lookahead for Prominent Notice Banner (แสดงเฉพาะปัจจุบัน และ 15 วันล่วงหน้า หากเลยวันแล้วเอาออกทันที)
   const lookahead15Date = new Date(todayYear, todayMonth - 1, todayDay + 15);
@@ -392,6 +414,82 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       dayNum: dayData.day,
       assignments: dayData.assignments,
       announcements: dayData.announcements,
+    });
+  };
+
+  const handleOpenPlusModal = (selectedDate: string, defaultType: 'assignment' | 'announcement' = 'assignment') => {
+    setAdminFormType(defaultType);
+    setNewTitle('');
+    setNewDescription('');
+    setNewDueDateStart(selectedDate);
+    setNewDueDateEnd(selectedDate);
+    setAnnTitle('');
+    setAnnContent('');
+    setAnnDateStart(selectedDate);
+    setAnnDateEnd(selectedDate);
+    setAnnIsUrgent(false);
+    setIsAdminPlusModalOpen(true);
+  };
+
+  const handleCreateAssignment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTitle.trim()) {
+      Swal.fire('ข้อผิดพลาด', 'กรุณาระบุชื่อหัวข้องาน', 'warning');
+      return;
+    }
+
+    storage.createAssignment({
+      title: newTitle.trim(),
+      description: newDescription.trim(),
+      dueDateStart: newDueDateStart,
+      dueDateEnd: newDueDateEnd,
+      type: 'assignment',
+    });
+
+    setIsAdminPlusModalOpen(false);
+    setNewTitle('');
+    setNewDescription('');
+    setModalDateData(null);
+
+    Swal.fire({
+      icon: 'success',
+      title: 'สำเร็จ',
+      text: 'มอบหมายงานและสร้างโฟลเดอร์ Google Drive เรียบร้อยแล้ว',
+      confirmButtonColor: '#7C3AED',
+      timer: 2000,
+    });
+  };
+
+  const handleCreateAnnouncement = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!annTitle.trim()) {
+      Swal.fire('ข้อผิดพลาด', 'กรุณาระบุหัวข้อประกาศ', 'warning');
+      return;
+    }
+
+    storage.createAnnouncement({
+      title: annTitle.trim(),
+      content: annContent.trim(),
+      type: annIsUrgent ? 'urgent' : 'general',
+      date: annDateEnd,
+      dateStart: annDateStart,
+      dateEnd: annDateEnd,
+      isUrgent: annIsUrgent,
+      authorName: currentUser?.fullName || 'ฝ่ายวิชาการ',
+    });
+
+    setIsAdminPlusModalOpen(false);
+    setAnnTitle('');
+    setAnnContent('');
+    setAnnIsUrgent(false);
+    setModalDateData(null);
+
+    Swal.fire({
+      icon: 'success',
+      title: 'เผยแพร่ประกาศสำเร็จ',
+      text: 'ประกาศแจ้งกิจกรรมถูกเผยแพร่ในระบบเรียบร้อยแล้ว',
+      confirmButtonColor: '#7C3AED',
+      timer: 2000,
     });
   };
 
@@ -712,11 +810,26 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     >
                       {day.day}
                     </span>
-                    {day.isToday && (
-                      <span className="text-[9px] font-black text-purple-700 bg-purple-100 px-1 py-0.2 rounded border border-purple-200 shadow-3xs leading-tight">
-                        วันนี้
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1">
+                      {isUserAdmin && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenPlusModal(day.dateString);
+                          }}
+                          title={`มอบหมายงาน / ประกาศวันที่ ${formatThaiDate(day.dateString)}`}
+                          className="opacity-0 group-hover:opacity-100 w-5 h-5 rounded-md bg-purple-600 hover:bg-purple-700 text-white flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
+                        >
+                          <Plus className="w-3 h-3 stroke-[2.5]" />
+                        </button>
+                      )}
+                      {day.isToday && (
+                        <span className="text-[9px] font-black text-purple-700 bg-purple-100 px-1 py-0.2 rounded border border-purple-200 shadow-3xs leading-tight">
+                          วันนี้
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {/* Title / Label text inside cell */}
@@ -871,12 +984,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-purple-100 relative max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
             {/* Modal Header */}
             <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-              <div className="flex items-center space-x-3">
-                <div className="p-2.5 rounded-2xl bg-purple-100 text-purple-700">
+              <div className="flex items-center space-x-3 min-w-0 flex-1">
+                <div className="p-2.5 rounded-2xl bg-purple-100 text-purple-700 shrink-0">
                   <CalendarIcon className="w-5 h-5" />
                 </div>
-                <div>
-                  <h3 className="text-base font-black text-slate-900 leading-tight">
+                <div className="min-w-0">
+                  <h3 className="text-base font-black text-slate-900 leading-tight truncate">
                     รายละเอียดวันที่ {getThaiShortDay(modalDateData.dateStr)} {formatThaiDate(modalDateData.dateStr)}
                   </h3>
                   <p className="text-xs text-slate-500">
@@ -885,12 +998,26 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </div>
               </div>
 
-              <button
-                onClick={() => setModalDateData(null)}
-                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2 shrink-0 ml-2">
+                {isUserAdmin && (
+                  <button
+                    id="calendar-modal-add-btn"
+                    onClick={() => handleOpenPlusModal(modalDateData.dateStr)}
+                    title="มอบหมายงาน หรือ ประกาศแจ้งข่าวสาร (+)"
+                    aria-label="มอบหมายงาน หรือ ประกาศแจ้งข่าวสาร"
+                    className="w-10 h-10 rounded-xl bg-purple-600 hover:bg-purple-700 active:scale-95 text-white flex items-center justify-center transition-all shadow-md shadow-purple-500/25 glow-purple-hover cursor-pointer group relative"
+                  >
+                    <Plus className="w-5 h-5 stroke-[2.5] transition-transform duration-200 group-hover:rotate-90" />
+                  </button>
+                )}
+
+                <button
+                  onClick={() => setModalDateData(null)}
+                  className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             {/* Modal Body */}
@@ -993,9 +1120,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               {/* Announcements Section */}
               {modalDateData.announcements.length > 0 ? (
                 <div className="space-y-2">
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                    ประกาศข่าวสารในวันนี้
-                  </span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                      ประกาศข่าวสารในวันนี้
+                    </span>
+                  </div>
                   {modalDateData.announcements.map((ann) => (
                     <div
                       key={ann.id}
@@ -1015,16 +1144,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
               {/* Empty state if nothing on this date */}
               {modalDateData.assignments.length === 0 && modalDateData.announcements.length === 0 && (
-                <div className="text-center py-8 space-y-2">
-                  <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+                <div className="text-center py-8 space-y-3">
+                  <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center mx-auto border border-purple-100">
                     <CalendarIcon className="w-6 h-6" />
                   </div>
-                  <p className="text-sm font-semibold text-slate-700">
-                    ไม่มีกำหนดส่งงานหรือประกาศพิเศษในวันนี้
-                  </p>
-                  <p className="text-xs text-slate-400">
-                    วันที่ {getThaiShortDay(modalDateData.dateStr)} {formatThaiDate(modalDateData.dateStr)} เป็นวันปฏิบัติงานตามปกติ
-                  </p>
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-slate-700">
+                      ไม่มีกำหนดส่งงานหรือประกาศพิเศษในวันนี้
+                    </p>
+                    <p className="text-xs text-slate-400">
+                      วันที่ {getThaiShortDay(modalDateData.dateStr)} {formatThaiDate(modalDateData.dateStr)} เป็นวันปฏิบัติงานตามปกติ
+                    </p>
+                  </div>
                 </div>
               )}
             </div>
@@ -1033,11 +1164,182 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div className="pt-3 border-t border-slate-100 flex justify-end">
               <button
                 onClick={() => setModalDateData(null)}
-                className="px-5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                className="px-5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
               >
                 ปิดหน้าต่าง
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4. ADMIN PLUS MODAL (Create Assignment or Create Announcement from Calendar) */}
+      {isAdminPlusModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-purple-100 relative">
+            <button
+              onClick={() => setIsAdminPlusModalOpen(false)}
+              className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-700 rounded-full cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Tab switch */}
+            <div className="flex gap-2 p-1 bg-slate-100 rounded-xl mb-5">
+              <button
+                type="button"
+                onClick={() => setAdminFormType('assignment')}
+                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                  adminFormType === 'assignment'
+                    ? 'bg-white text-purple-900 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                1. มอบหมายงานวิชาการ
+              </button>
+              <button
+                type="button"
+                onClick={() => setAdminFormType('announcement')}
+                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                  adminFormType === 'announcement'
+                    ? 'bg-white text-purple-900 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                2. ประกาศแจ้งข่าวสาร / กิจกรรม
+              </button>
+            </div>
+
+            {/* Form 1: Assignment */}
+            {adminFormType === 'assignment' ? (
+              <form onSubmit={handleCreateAssignment} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    ชื่อหัวข้องานวิชาการที่มอบหมาย *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newTitle}
+                    onChange={(e) => setNewTitle(e.target.value)}
+                    placeholder="เช่น ส่งแผนการจัดการเรียนรู้ ภาคเรียนที่ 1/2569"
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    รายละเอียดคำชี้แจง / คำแนะนำ
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={newDescription}
+                    onChange={(e) => setNewDescription(e.target.value)}
+                    placeholder="ระบุข้อกำหนด แบบฟอร์ม หรือคำแนะนำสำหรับคณะครู..."
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                {/* Date Picker Range */}
+                <DateRangePicker
+                  startDate={newDueDateStart}
+                  endDate={newDueDateEnd}
+                  onChange={(start, end) => {
+                    setNewDueDateStart(start);
+                    setNewDueDateEnd(end);
+                  }}
+                  label="กำหนดระยะเวลาเปิดรับงาน - สิ้นสุดกำหนดส่ง *"
+                />
+
+                <div className="pt-3 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsAdminPlusModalOpen(false)}
+                    className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                  >
+                    ยกเลิก
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 text-xs font-semibold text-white bg-purple-600 hover:bg-purple-700 rounded-xl shadow-xs glow-purple-hover flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>สร้างงานที่มอบหมาย</span>
+                  </button>
+                </div>
+              </form>
+            ) : (
+              /* Form 2: Announcement */
+              <form onSubmit={handleCreateAnnouncement} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    หัวข้อประกาศ / ชื่อกิจกรรม *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={annTitle}
+                    onChange={(e) => setAnnTitle(e.target.value)}
+                    placeholder="เช่น แจ้งกำหนดการประชุมกลุ่มสาระฯ หรือ อบรมเชิงปฏิบัติการ"
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    เนื้อหา / รายละเอียดประกาศ
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={annContent}
+                    onChange={(e) => setAnnContent(e.target.value)}
+                    placeholder="รายละเอียดประกาศ สถานที่ หรือข้อปฏิบัติ..."
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                {/* Date Picker Range for Event */}
+                <DateRangePicker
+                  startDate={annDateStart}
+                  endDate={annDateEnd}
+                  onChange={(start, end) => {
+                    setAnnDateStart(start);
+                    setAnnDateEnd(end);
+                  }}
+                  label="กำหนดวัน / ช่วงเวลาจัดกิจกรรม *"
+                />
+
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="checkbox"
+                    id="dashboard-create-ann-urgent"
+                    checked={annIsUrgent}
+                    onChange={(e) => setAnnIsUrgent(e.target.checked)}
+                    className="rounded border-slate-300 text-purple-600 focus:ring-purple-500 w-4 h-4 cursor-pointer"
+                  />
+                  <label htmlFor="dashboard-create-ann-urgent" className="text-xs font-semibold text-slate-700 cursor-pointer">
+                    ทำเครื่องหมายเป็นประกาศด่วน (Urgent Notification)
+                  </label>
+                </div>
+
+                <div className="pt-3 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsAdminPlusModalOpen(false)}
+                    className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                  >
+                    ยกเลิก
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 text-xs font-semibold text-white bg-purple-600 hover:bg-purple-700 rounded-xl shadow-xs glow-purple-hover flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Megaphone className="w-3.5 h-3.5" />
+                    <span>เผยแพร่ประกาศ</span>
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

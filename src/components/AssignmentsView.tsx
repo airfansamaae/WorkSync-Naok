@@ -886,10 +886,24 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                     return isCompA ? 1 : -1;
                   }
 
-                  // 2. Closest deadline on top (ascending order of dueDateEnd or dueDateStart)
+                  // 2. Closest deadline on top ("แสดงอันล่าสุดที่ใกล้ถึงวันจะต้องส่ง")
                   const dateA = a.dueDateEnd || a.dueDateStart || '9999-99-99';
                   const dateB = b.dueDateEnd || b.dueDateStart || '9999-99-99';
-                  return dateA.localeCompare(dateB);
+
+                  const isUpcomingA = dateA >= todayDateNow;
+                  const isUpcomingB = dateB >= todayDateNow;
+
+                  if (isUpcomingA !== isUpcomingB) {
+                    return isUpcomingA ? -1 : 1;
+                  }
+
+                  if (isUpcomingA) {
+                    // Ascending: closest upcoming deadline to today comes first
+                    return dateA.localeCompare(dateB);
+                  } else {
+                    // Overdue: most recent first
+                    return dateB.localeCompare(dateA);
+                  }
                 })
                 .map((assignment) => {
                   const assignmentSubs = submissions.filter((s) => s.assignmentId === assignment.id);
@@ -905,10 +919,10 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                   return (
                     <div
                       key={assignment.id}
-                      className={`p-3 sm:p-3.5 rounded-xl border bg-white flex flex-col gap-2 transition-all hover:shadow-xs ${
+                      className={`p-3 sm:p-3.5 rounded-xl border flex flex-col gap-2 transition-all hover:shadow-xs ${
                         isCompleted 
-                          ? 'border-emerald-200 border-l-4 border-l-emerald-500' 
-                          : 'border-purple-200 border-l-4 border-l-purple-600'
+                          ? 'border-emerald-300 border-l-4 border-l-emerald-500 bg-emerald-50/20' 
+                          : 'border-purple-200 border-l-4 border-l-purple-600 bg-white'
                       }`}
                     >
                       {/* Card Top: Details & Actions */}
@@ -1893,7 +1907,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
               <X className="w-5 h-5" />
             </button>
 
-            <div className="mb-4">
+            <div className="mb-3">
               <span className="text-[11px] font-bold uppercase tracking-wider text-purple-700 px-2 py-0.5 rounded bg-purple-100">
                 สถานะการส่งงานของคณะครู
               </span>
@@ -1905,92 +1919,132 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
               </p>
             </div>
 
-            <div className="space-y-2 max-h-[60vh] overflow-y-auto">
-              {approvedMembers.map((member) => {
-                const sub = submissions.find(
-                  (s) => s.assignmentId === memberStatusModalAssignment.id && s.memberId === member.id
-                );
-                const hasSubmitted = !!sub;
+            {/* Summary counters */}
+            <div className="flex items-center justify-between py-2 px-3 bg-slate-50 rounded-xl border border-slate-200/80 text-xs mb-3">
+              <span className="text-slate-600 font-medium">
+                สมาชิกทั้งหมด {approvedMembers.length} คน
+              </span>
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 font-bold text-[11px] border border-rose-200">
+                  ยังไม่ส่ง {approvedMembers.filter((m) => !submissions.some((s) => s.assignmentId === memberStatusModalAssignment.id && s.memberId === m.id)).length} คน
+                </span>
+                <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-bold text-[11px] border border-emerald-300">
+                  ส่งครบแล้ว {approvedMembers.filter((m) => submissions.some((s) => s.assignmentId === memberStatusModalAssignment.id && s.memberId === m.id)).length} คน
+                </span>
+              </div>
+            </div>
 
-                return (
-                  <div
-                    key={member.id}
-                    className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-slate-50/50"
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div className="w-8 h-8 rounded-full bg-purple-100 text-purple-700 font-semibold text-xs flex items-center justify-center overflow-hidden">
-                        {member.avatarUrl ? (
-                          <img src={member.avatarUrl} alt={member.fullName} className="w-full h-full object-cover" />
-                        ) : (
-                          member.fullName.charAt(0)
-                        )}
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-slate-900 leading-tight">
-                          {member.fullName}
-                        </p>
-                        <p className="text-[11px] text-slate-500">
-                          {member.department}
-                        </p>
-                      </div>
-                    </div>
+            <div className="space-y-2 max-h-[58vh] overflow-y-auto pr-1">
+              {[...approvedMembers]
+                .sort((a, b) => {
+                  const hasSubA = submissions.some(
+                    (s) => s.assignmentId === memberStatusModalAssignment.id && s.memberId === a.id
+                  );
+                  const hasSubB = submissions.some(
+                    (s) => s.assignmentId === memberStatusModalAssignment.id && s.memberId === b.id
+                  );
 
-                    <div>
-                      {hasSubmitted ? (
-                        <div className="flex items-center gap-2 flex-wrap justify-end">
-                          <span className="px-2.5 py-1 text-[11px] font-semibold rounded-md bg-emerald-100 text-emerald-800 flex items-center gap-1">
-                            <Check className="w-3 h-3" />
-                            <span>ส่งแล้ว ({sub.submissionDate})</span>
-                          </span>
-                          {sub.files && sub.files.length > 0 && (
-                            <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                              {sub.files.map((f, fIdx) => (
-                                <div key={f.id || fIdx} className="inline-flex items-center gap-1 p-1 bg-white border border-slate-200 rounded-lg text-xs">
-                                  <button
-                                    onClick={() => {
-                                      onOpenFilePreview(f, memberStatusModalAssignment.title, member.fullName);
-                                    }}
-                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 font-semibold text-purple-700 hover:bg-purple-50 rounded cursor-pointer"
-                                    title={`เปิดดูไฟล์ต้นฉบับ (เต็มหน้าจอพอดี 100%): ${f.name}`}
-                                  >
-                                    <Eye className="w-3.5 h-3.5" />
-                                    <span className="max-w-[100px] truncate">{f.name}</span>
-                                  </button>
+                  // Unsubmitted on top, submitted (ส่งครบ) at bottom
+                  if (hasSubA !== hasSubB) {
+                    return hasSubA ? 1 : -1;
+                  }
+                  return a.fullName.localeCompare(b.fullName, 'th');
+                })
+                .map((member) => {
+                  const sub = submissions.find(
+                    (s) => s.assignmentId === memberStatusModalAssignment.id && s.memberId === member.id
+                  );
+                  const hasSubmitted = !!sub;
 
-                                  <button
-                                    onClick={() => handleDownloadFile(f)}
-                                    className="p-1 text-emerald-700 hover:bg-emerald-50 rounded cursor-pointer"
-                                    title={`ดาวน์โหลดไฟล์ดิบ: ${f.name}`}
-                                  >
-                                    <Download className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-
-                          {/* Admin Delete Submission Button */}
-                          {isAdmin && (
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteSubmissionByAdmin(sub.id, member.fullName)}
-                              className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg border border-rose-200 transition-colors cursor-pointer shrink-0"
-                              title={`ลบการส่งงานของ ${member.fullName}`}
-                              aria-label={`ลบการส่งงานของ ${member.fullName}`}
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                  return (
+                    <div
+                      key={member.id}
+                      className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
+                        hasSubmitted
+                          ? 'border-emerald-300 bg-emerald-50/70 border-l-4 border-l-emerald-600 shadow-2xs'
+                          : 'border-rose-200 bg-rose-50/20 border-l-4 border-l-rose-500'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-3">
+                        <div
+                          className={`w-8 h-8 rounded-full font-semibold text-xs flex items-center justify-center overflow-hidden shrink-0 ${
+                            hasSubmitted
+                              ? 'bg-emerald-100 text-emerald-800 ring-2 ring-emerald-300'
+                              : 'bg-rose-100 text-rose-700 ring-2 ring-rose-200'
+                          }`}
+                        >
+                          {member.avatarUrl ? (
+                            <img src={member.avatarUrl} alt={member.fullName} className="w-full h-full object-cover" />
+                          ) : (
+                            member.fullName.charAt(0)
                           )}
                         </div>
-                      ) : (
-                        <span className="px-2.5 py-1 text-[11px] font-semibold rounded-md bg-rose-100 text-rose-800">
-                          ยังไม่ส่ง
-                        </span>
-                      )}
+                        <div>
+                          <p className="text-xs font-bold text-slate-900 leading-tight">
+                            {member.fullName}
+                          </p>
+                          <p className="text-[11px] text-slate-500">
+                            {member.department}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div>
+                        {hasSubmitted ? (
+                          <div className="flex items-center gap-2 flex-wrap justify-end">
+                            <span className="px-2.5 py-1 text-[11px] font-bold rounded-md bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                              <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                              <span>ส่งครบแล้ว ({formatThaiDate(sub.submissionDate)})</span>
+                            </span>
+                            {sub.files && sub.files.length > 0 && (
+                              <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                                {sub.files.map((f, fIdx) => (
+                                  <div key={f.id || fIdx} className="inline-flex items-center gap-1 p-1 bg-white border border-emerald-200 rounded-lg text-xs shadow-3xs">
+                                    <button
+                                      onClick={() => {
+                                        onOpenFilePreview(f, memberStatusModalAssignment.title, member.fullName);
+                                      }}
+                                      className="inline-flex items-center gap-1 px-1.5 py-0.5 font-semibold text-purple-700 hover:bg-purple-50 rounded cursor-pointer"
+                                      title={`เปิดดูไฟล์ต้นฉบับ (เต็มหน้าจอพอดี 100%): ${f.name}`}
+                                    >
+                                      <Eye className="w-3.5 h-3.5" />
+                                      <span className="max-w-[100px] truncate">{f.name}</span>
+                                    </button>
+
+                                    <button
+                                      onClick={() => handleDownloadFile(f)}
+                                      className="p-1 text-emerald-700 hover:bg-emerald-50 rounded cursor-pointer"
+                                      title={`ดาวน์โหลดไฟล์ดิบ: ${f.name}`}
+                                    >
+                                      <Download className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Admin Delete Submission Button */}
+                            {isAdmin && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteSubmissionByAdmin(sub.id, member.fullName)}
+                                className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg border border-rose-200 transition-colors cursor-pointer shrink-0"
+                                title={`ลบการส่งงานของ ${member.fullName}`}
+                                aria-label={`ลบการส่งงานของ ${member.fullName}`}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="px-2.5 py-1 text-[11px] font-bold rounded-md bg-rose-100 text-rose-800 border border-rose-200">
+                            ยังไม่ส่ง
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
             </div>
 
             <div className="mt-5 text-right">

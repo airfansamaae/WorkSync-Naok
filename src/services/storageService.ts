@@ -1056,6 +1056,29 @@ export class StorageService {
     this.notify();
   }
 
+  public updateUserPassword(userId: string, newPassword: string): boolean {
+    const trimmed = newPassword.trim();
+    let updatedUser: User | null = null;
+    const users = this.getUsers().map(u => {
+      if (u.id === userId) {
+        const updated = { ...u, password: trimmed, updatedAt: new Date().toISOString() };
+        updatedUser = updated;
+        const current = this.getCurrentUser();
+        if (current && current.id === userId) {
+          sessionStorage.setItem('academic_auth_session', JSON.stringify(updated));
+        }
+        return updated;
+      }
+      return u;
+    });
+    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+    if (updatedUser) {
+      this.broadcastChange('users', 'update', updatedUser);
+    }
+    this.notify();
+    return !!updatedUser;
+  }
+
   public deleteUser(userId: string): boolean {
     const users = this.getUsers().filter(u => u.id !== userId);
     localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));

@@ -241,24 +241,68 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
   const handleContainerScroll = () => {
     const container = scrollContainerRef.current;
     if (!container) return;
+
+    // Check if user scrolled near the bottom of document
+    const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 40;
+    if (isAtBottom && totalPages > 1) {
+      setCurrentPageInView(totalPages);
+      return;
+    }
+
     const containerRect = container.getBoundingClientRect();
-    const triggerPoint = containerRect.top + 180; // 180px below container top
+    // Use trigger line at 30% down the container viewport
+    const triggerPoint = containerRect.top + Math.min(220, containerRect.height * 0.3);
 
     let activePage = 1;
-    pageDomMap.current.forEach((el, pageNum) => {
-      const rect = el.getBoundingClientRect();
-      if (rect.top <= triggerPoint && rect.bottom >= containerRect.top) {
-        activePage = pageNum;
-      }
-    });
+    let found = false;
+
+    if (pageDomMap.current.size > 0) {
+      pageDomMap.current.forEach((el, pageNum) => {
+        const rect = el.getBoundingClientRect();
+        if (rect.top <= triggerPoint && rect.bottom >= containerRect.top) {
+          activePage = pageNum;
+          found = true;
+
+          // If a section is taller than 1.3 standard A4 pages
+          const a4HeightPx = (el.offsetWidth * 297) / 210 || 1122.5;
+          if (el.offsetHeight > a4HeightPx * 1.3) {
+            const scrolledInside = triggerPoint - rect.top;
+            const subPageOffset = Math.floor(scrolledInside / a4HeightPx);
+            if (subPageOffset > 0) {
+              activePage = Math.min(totalPages, pageNum + subPageOffset);
+            }
+          }
+        }
+      });
+    }
+
+    if (!found) {
+      const a4HeightPx = 1122.5 * (zoomLevel / 100);
+      const calculated = Math.floor((container.scrollTop + 100) / (a4HeightPx + 28)) + 1;
+      activePage = Math.min(totalPages, Math.max(1, calculated));
+    }
 
     setCurrentPageInView(activePage);
   };
 
   const scrollToPage = (pageNum: number) => {
+    if (pageNum < 1 || pageNum > totalPages) return;
     const targetEl = pageDomMap.current.get(pageNum);
-    if (targetEl) {
-      targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (targetEl && scrollContainerRef.current) {
+      const containerRect = scrollContainerRef.current.getBoundingClientRect();
+      const elRect = targetEl.getBoundingClientRect();
+      const scrollOffset = elRect.top - containerRect.top + scrollContainerRef.current.scrollTop - 20;
+      scrollContainerRef.current.scrollTo({
+        top: Math.max(0, scrollOffset),
+        behavior: 'smooth'
+      });
+      setCurrentPageInView(pageNum);
+    } else if (scrollContainerRef.current) {
+      const a4HeightPx = 1122.5 * (zoomLevel / 100);
+      scrollContainerRef.current.scrollTo({
+        top: (pageNum - 1) * (a4HeightPx + 28),
+        behavior: 'smooth'
+      });
       setCurrentPageInView(pageNum);
     }
   };
@@ -822,6 +866,7 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
         ignoreWidth: false,
         ignoreHeight: false,
         breakPages: true,
+        ignoreLastRenderedPageBreak: false,
         renderHeaders: true,
         renderFooters: true,
         renderFootnotes: true,
@@ -829,17 +874,42 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
       })
         .then(() => {
           if (!isMounted) return;
-          const sections = docxContainerRef.current?.querySelectorAll('section.docx');
-          const count = sections && sections.length > 0 ? sections.length : 1;
+          const container = docxContainerRef.current;
+          if (!container) return;
+
+          const sections = container.querySelectorAll('section');
+          pageDomMap.current.clear();
+
           if (sections && sections.length > 0) {
-            sections.forEach((sec, idx) => {
-              sec.setAttribute('data-page-index', String(idx + 1));
-              registerPageRef(idx + 1, sec as HTMLDivElement);
+            let runningPage = 0;
+            sections.forEach((sec) => {
+              sec.style.width = 'min(100%, 210mm)';
+              sec.style.minHeight = '297mm';
+              sec.style.boxSizing = 'border-box';
+              sec.style.marginLeft = 'auto';
+              sec.style.marginRight = 'auto';
+
+              const a4HeightPx = 1122.5;
+              const pagesInSec = Math.max(1, Math.round(sec.offsetHeight / a4HeightPx));
+
+              for (let p = 0; p < pagesInSec; p++) {
+                runningPage++;
+                if (p === 0) {
+                  sec.setAttribute('data-page-index', String(runningPage));
+                  registerPageRef(runningPage, sec as HTMLDivElement);
+                }
+              }
             });
+
+            const total = Math.max(sections.length, runningPage);
+            setDocxPreviewPagesCount(total);
+          } else {
+            setDocxPreviewPagesCount(1);
           }
-          setDocxPreviewPagesCount(count);
+
           setParsedPages([]);
           setDocxRenderMode('docx-preview');
+          setCurrentPageInView(1);
         })
         .catch(async (err) => {
           if (!isMounted) return;
@@ -890,12 +960,11 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
       {/* INJECTED STYLES FOR AUTHENTIC A4 SIZING, SARABUN FONT, BALANCED SYMMETRICAL MARGINS, & TABLE GRIDS */}
       <style>{`
         /* Authentic A4 Dimensions: 210mm × 297mm (21 × 29.7 ซม.) */
-        /* Symmetrical balanced margins: 20mm on all sides so pages are perfectly centered and never skewed/tilted */
+        /* Symmetrical balanced margins: pages are perfectly centered and fit screen seamlessly */
         .a4-page-sheet {
           width: min(100%, 210mm) !important;
           max-width: 100% !important;
           min-height: 297mm !important;
-          aspect-ratio: 210 / 297;
           margin: 16px auto 28px auto !important;
           padding: 20mm 20mm 20mm 20mm !important;
           box-sizing: border-box !important;
@@ -907,10 +976,10 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
           box-shadow: 0 10px 30px -4px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
           border-radius: 2px !important;
           position: relative !important;
-          overflow: hidden !important;
+          overflow: visible !important;
         }
 
-        /* docx-preview wrapper styling to enforce A4 pagination, centered alignment, and Sarabun font */
+        /* docx-preview wrapper styling to enforce authentic A4 pagination, centered alignment, and Sarabun font */
         .docx-wrapper {
           background: transparent !important;
           padding: 0 !important;
@@ -919,12 +988,11 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
           align-items: center !important;
           width: 100% !important;
         }
-        .docx-wrapper > section.docx {
+        .docx-wrapper > section.docx,
+        .docx-render-stage section {
           width: min(100%, 210mm) !important;
           max-width: 100% !important;
           min-height: 297mm !important;
-          aspect-ratio: 210 / 297;
-          padding: 20mm 20mm 20mm 20mm !important;
           margin: 16px auto 28px auto !important;
           background: #ffffff !important;
           color: #111827 !important;
@@ -935,20 +1003,12 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
           font-family: 'TH Sarabun New', 'TH Sarabun PSK', 'Sarabun', Tahoma, sans-serif !important;
           font-size: 16pt !important;
           line-height: 1.6 !important;
-          overflow: hidden !important;
-        }
-        .docx-wrapper > section.docx::before {
-          content: 'ขนาดกระดาษ A4 (21 × 29.7 ซม.)';
-          position: absolute;
-          top: 6mm;
-          right: 15mm;
-          font-size: 10pt;
-          color: #94a3b8;
-          font-family: 'TH Sarabun New', 'Sarabun', Tahoma, sans-serif;
-          pointer-events: none;
+          overflow: visible !important;
         }
         @media screen and (max-width: 860px) {
-          .a4-page-sheet, .docx-wrapper > section.docx {
+          .a4-page-sheet, 
+          .docx-wrapper > section.docx,
+          .docx-render-stage section {
             width: 95vw !important;
             min-height: calc(95vw * 297 / 210) !important;
             padding: 12mm 10mm !important;
@@ -1494,15 +1554,15 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
         )}
       </main>
 
-      {/* FLOATING SCROLL PAGE INDICATOR (for multi-page Word documents) */}
-      {!loading && !error && file && isDocx && totalPages > 1 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 px-4 py-2 bg-slate-900/95 border border-purple-500/50 text-white rounded-full shadow-2xl backdrop-blur-md transition-all select-none">
+      {/* FLOATING SCROLL PAGE INDICATOR (for Word / Doc documents) */}
+      {!loading && !error && file && isDocx && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-3.5 sm:px-4 py-2 bg-slate-900/95 border border-purple-500/50 text-white rounded-full shadow-2xl backdrop-blur-md transition-all select-none">
           {totalPages > 1 && (
             <button
               type="button"
               onClick={() => scrollToPage(currentPageInView - 1)}
               disabled={currentPageInView <= 1}
-              className="p-1.5 hover:bg-slate-800 disabled:opacity-30 rounded-full transition-colors cursor-pointer text-slate-300 hover:text-white"
+              className="p-1 hover:bg-slate-800 disabled:opacity-30 rounded-full transition-colors cursor-pointer text-slate-300 hover:text-white"
               title="เลื่อนไปหน้าก่อนหน้า"
             >
               <ChevronUp className="w-4 h-4" />
@@ -1512,10 +1572,11 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
           <div className="flex items-center gap-2 text-xs sm:text-sm font-medium">
             <FileText className="w-4 h-4 text-purple-400 shrink-0" />
             <span>หน้า</span>
-            <span className="font-bold text-amber-300 text-sm sm:text-base px-2 py-0.5 bg-slate-800 rounded border border-slate-700">
+            <span className="font-bold text-amber-300 text-sm sm:text-base px-2 py-0.5 bg-slate-800 rounded border border-slate-700 min-w-[28px] text-center">
               {currentPageInView}
             </span>
             <span className="text-slate-400">/ {totalPages}</span>
+            <span className="text-[11px] text-purple-300/80 hidden sm:inline">(A4 210×297 มม.)</span>
           </div>
 
           {totalPages > 1 && (
@@ -1523,7 +1584,7 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
               type="button"
               onClick={() => scrollToPage(currentPageInView + 1)}
               disabled={currentPageInView >= totalPages}
-              className="p-1.5 hover:bg-slate-800 disabled:opacity-30 rounded-full transition-colors cursor-pointer text-slate-300 hover:text-white"
+              className="p-1 hover:bg-slate-800 disabled:opacity-30 rounded-full transition-colors cursor-pointer text-slate-300 hover:text-white"
               title="เลื่อนไปหน้าถัดไป"
             >
               <ChevronDown className="w-4 h-4" />

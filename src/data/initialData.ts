@@ -15,7 +15,7 @@ export const INITIAL_SCHOOL_PROFILE: SchoolProfile = {
   name: 'โรงเรียนสาธิตเทศบาลวิชาการ',
   subName: 'สำนักงานเขตพื้นที่การศึกษาประถมศึกษา กระบี่',
   masterAdminName: 'Admin ผู้ดูแลระบบ',
-  logoUrl: 'https://images.unsplash.com/photo-1546410531-bb4caa6b424d?w=150&auto=format&fit=crop&q=80',
+  logoUrl: '/school-logo.png',
   primaryDriveFolderId: '1IpsaGJhJqtuYHTLiHmT2kqOe7CBq4as-',
   academicYear: '2569',
   semester: '1',

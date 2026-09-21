@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { User, SchoolProfile, ActiveTab } from '../types';
 import { storage, SyncStatusInfo } from '../services/storageService';
+import { PWAInstallButton } from './PWAInstallButton';
 
 interface TopHeaderProps {
   currentUser: User | null;
@@ -93,6 +94,9 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
           {/* Right Action Tools */}
           <div className="flex items-center space-x-2 sm:space-x-3">
+            {/* PWA Install Button */}
+            <PWAInstallButton />
+
             {/* Live Real-time Sync Indicator */}
             <button
               id="header-realtime-sync-btn"

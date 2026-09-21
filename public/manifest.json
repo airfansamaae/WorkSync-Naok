@@ -1,0 +1,32 @@
+{
+  "id": "/",
+  "name": "ระบบงานวิชาการ มอบหมายงาน-ส่งงาน และจัดการเอกสาร",
+  "short_name": "งานวิชาการ",
+  "description": "ระบบบริหารงานวิชาการ มอบหมายงาน ส่งงาน ติดตามตรวจงาน และจัดการเอกสาร",
+  "theme_color": "#7c3aed",
+  "background_color": "#f8fafc",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "start_url": "/",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

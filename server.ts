@@ -891,12 +891,13 @@ async function startServer() {
   });
 
   // Broadcast helper
-  const broadcastSync = (eventType: string, payload: any) => {
+  const broadcastSync = (eventType: string, payload: any, senderClientId?: string) => {
     serverDataVersion = Date.now();
     const data = JSON.stringify({ 
       type: eventType, 
       payload, 
       version: serverDataVersion,
+      senderClientId,
       timestamp: Date.now() 
     });
     
@@ -972,7 +973,7 @@ async function startServer() {
 
   // Sync / Mutate endpoint (insert, update, delete, batch)
   app.post('/api/sync', (req, res) => {
-    const { table, action, data, school, fullState } = req.body;
+    const { table, action, data, school, fullState, clientId } = req.body;
 
     if (fullState) {
       // Full state sync
@@ -1028,7 +1029,7 @@ async function startServer() {
 
     saveDbToDisk();
 
-    broadcastSync('DATA_CHANGED', { table, action, dataId: data?.id });
+    broadcastSync('DATA_CHANGED', { table, action, dataId: data?.id, clientId }, clientId);
 
     res.json({
       success: true,
@@ -1039,9 +1040,25 @@ async function startServer() {
 
   // API trigger for real-time broadcasts
   app.post('/api/sync/broadcast', (req, res) => {
-    const { eventType, payload } = req.body;
-    broadcastSync(eventType || 'DATA_CHANGED', payload || {});
+    const { eventType, payload, clientId } = req.body;
+    broadcastSync(eventType || 'DATA_CHANGED', payload || {}, clientId);
     res.json({ success: true, version: serverDataVersion });
+  });
+
+  // Service Worker for PWA (Always serve as javascript with correct MIME type)
+  app.get(['/sw.js', '/dev-dist/sw.js'], (req, res) => {
+    const publicSw = path.join(process.cwd(), 'public', 'sw.js');
+    if (fs.existsSync(publicSw)) {
+      res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+      return res.sendFile(publicSw);
+    }
+    const distSw = path.join(process.cwd(), 'dist', 'sw.js');
+    if (fs.existsSync(distSw)) {
+      res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+      return res.sendFile(distSw);
+    }
+    res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    return res.send('self.addEventListener("install", () => self.skipWaiting()); self.addEventListener("activate", () => self.clients.claim());');
   });
 
   // Vite development middleware vs production static files

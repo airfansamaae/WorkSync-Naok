@@ -169,71 +169,9 @@ export default function App() {
       refreshAllData();
     });
 
-    // Resilient SSE connection for instant live updates across all browsers and devices
-    let sseSource: EventSource | null = null;
-    let sseReconnectTimer: any = null;
-    let isComponentMounted = true;
-
-    const connectSse = () => {
-      if (!isComponentMounted) return;
-      try {
-        if (typeof window !== 'undefined' && 'EventSource' in window) {
-          if (sseSource) {
-            try { sseSource.close(); } catch {}
-          }
-          sseSource = new EventSource('/api/sync/sse');
-          sseSource.onmessage = (event) => {
-            try {
-              const parsed = JSON.parse(event.data);
-              if (parsed && parsed.type === 'DATA_CHANGED') {
-                storage.pullLatestFromCloud(true).then(() => {
-                  refreshAllData();
-                });
-              }
-            } catch {
-              // Safe ignore
-            }
-          };
-          sseSource.onerror = () => {
-            if (sseSource) {
-              try { sseSource.close(); } catch {}
-              sseSource = null;
-            }
-            if (isComponentMounted) {
-              clearTimeout(sseReconnectTimer);
-              sseReconnectTimer = setTimeout(connectSse, 4000);
-            }
-          };
-        }
-      } catch {
-        // SSE graceful fallback
-      }
-    };
-
-    connectSse();
-
-    // High-reliability background poll every 4 seconds to ensure all browsers and emails sync immediately
-    const pollInterval = setInterval(() => {
-      storage.pullLatestFromCloud().then((hasChanged) => {
-        if (hasChanged) {
-          refreshAllData();
-        }
-      });
-    }, 4000);
-
     return () => {
-      isComponentMounted = false;
       unsubGoogleAuth();
       unsubscribe();
-      clearInterval(pollInterval);
-      clearTimeout(sseReconnectTimer);
-      if (sseSource) {
-        try {
-          sseSource.close();
-        } catch {
-          // ignore
-        }
-      }
     };
   }, []);
 

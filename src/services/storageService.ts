@@ -504,6 +504,7 @@ export class StorageService {
   private hasPendingSync: boolean = false;
   private lastRemoteVersion: number = 0;
   private inMemoryWebsites: RecommendedWebsite[] | null = null;
+  private clientId: string = 'client_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
   private syncInfo: SyncStatusInfo = {
     status: 'synced',
     lastSyncedAt: new Date(),
@@ -587,6 +588,9 @@ export class StorageService {
         this.broadcastChannel = new BroadcastChannel('academic_hub_realtime_sync');
         this.broadcastChannel.onmessage = (event) => {
           if (event.data && event.data.type === 'DATA_UPDATED') {
+            if (event.data.clientId && event.data.clientId === this.clientId) {
+              return;
+            }
             this.pullLatestFromCloud(true);
           }
         };
@@ -632,6 +636,12 @@ export class StorageService {
         try {
           const data = JSON.parse(event.data);
           if (data && (data.type === 'DATA_CHANGED' || data.type === 'INIT_SYNC')) {
+            if (data.senderClientId && data.senderClientId === this.clientId) {
+              return;
+            }
+            if (data.payload?.clientId && data.payload.clientId === this.clientId) {
+              return;
+            }
             this.pullLatestFromCloud(true);
           }
         } catch {
@@ -783,7 +793,7 @@ export class StorageService {
     // 1. Broadcast locally across tabs
     if (this.broadcastChannel) {
       try {
-        this.broadcastChannel.postMessage({ type: 'DATA_UPDATED', table, action, timestamp: Date.now() });
+        this.broadcastChannel.postMessage({ type: 'DATA_UPDATED', table, action, clientId: this.clientId, timestamp: Date.now() });
       } catch {
         // ignore
       }
@@ -802,6 +812,7 @@ export class StorageService {
           action,
           data: cleanPayload,
           school: table === 'school' ? cleanPayload : undefined,
+          clientId: this.clientId,
         }),
       });
 
@@ -1081,10 +1092,12 @@ export class StorageService {
 
   public deleteUser(userId: string): boolean {
     const users = this.getUsers().filter(u => u.id !== userId);
-    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
-    this.broadcastChange('users', 'delete', { id: userId });
-    this.broadcastChange('users', 'setList', users);
+    safeSetLocalStorage(STORAGE_KEYS.USERS, users);
     this.notify();
+
+    setTimeout(() => {
+      this.broadcastChange('users', 'delete', { id: userId });
+    }, 0);
     return true;
   }
 
@@ -1205,24 +1218,23 @@ export class StorageService {
       });
     });
 
-    if (driveFileIds.length > 0) {
-      this.deleteFilesFromGoogleDrive(driveFileIds);
-    }
-
     const remainingSubs = submissions.filter(s => s.assignmentId !== id);
-    localStorage.setItem(STORAGE_KEYS.SUBMISSIONS, JSON.stringify(remainingSubs));
-    this.broadcastChange('submissions', 'setList', remainingSubs);
+    safeSetLocalStorage(STORAGE_KEYS.SUBMISSIONS, remainingSubs);
 
     const assignments = this.getAssignments().filter(a => a.id !== id);
-    localStorage.setItem(STORAGE_KEYS.ASSIGNMENTS, JSON.stringify(assignments));
-    this.broadcastChange('assignments', 'delete', { id });
-    this.broadcastChange('assignments', 'setList', assignments);
+    safeSetLocalStorage(STORAGE_KEYS.ASSIGNMENTS, assignments);
 
     const announcements = this.getAnnouncements().filter(ann => ann.assignmentId !== id);
-    localStorage.setItem(STORAGE_KEYS.ANNOUNCEMENTS, JSON.stringify(announcements));
-    this.broadcastChange('announcements', 'setList', announcements);
+    safeSetLocalStorage(STORAGE_KEYS.ANNOUNCEMENTS, announcements);
 
     this.notify();
+
+    setTimeout(() => {
+      if (driveFileIds.length > 0) {
+        this.deleteFilesFromGoogleDrive(driveFileIds).catch(() => {});
+      }
+      this.broadcastChange('assignments', 'delete', { id });
+    }, 0);
   }
 
   // --- Submissions ---
@@ -1311,25 +1323,38 @@ export class StorageService {
     }
 
     const targetFile = (sub.files || []).find(f => f.id === fileId);
-    if (targetFile?.driveFileId) {
-      this.deleteFileFromGoogleDrive(targetFile.driveFileId);
-    }
+    const driveFileId = targetFile?.driveFileId;
 
     const updatedFiles = (sub.files || []).filter(f => f.id !== fileId);
+    let updatedSub: Submission | null = null;
+    let isDeleted = false;
+
     if (updatedFiles.length === 0) {
       submissions.splice(subIndex, 1);
-      this.broadcastChange('submissions', 'delete', { id: submissionId });
+      isDeleted = true;
     } else {
       submissions[subIndex] = {
         ...sub,
         files: updatedFiles,
         updatedAt: new Date().toISOString()
       };
-      this.broadcastChange('submissions', 'update', submissions[subIndex]);
+      updatedSub = submissions[subIndex];
     }
 
     safeSetLocalStorage(STORAGE_KEYS.SUBMISSIONS, submissions);
     this.notify();
+
+    setTimeout(() => {
+      if (driveFileId) {
+        this.deleteFileFromGoogleDrive(driveFileId).catch(() => {});
+      }
+      if (isDeleted) {
+        this.broadcastChange('submissions', 'delete', { id: submissionId });
+      } else if (updatedSub) {
+        this.broadcastChange('submissions', 'update', updatedSub);
+      }
+    }, 0);
+
     return true;
   }
 
@@ -1343,15 +1368,18 @@ export class StorageService {
     }
 
     const driveFileIds = (target.files || []).map(f => f.driveFileId).filter(Boolean) as string[];
-    if (driveFileIds.length > 0) {
-      this.deleteFilesFromGoogleDrive(driveFileIds);
-    }
 
     const filtered = submissions.filter(s => s.id !== id);
     safeSetLocalStorage(STORAGE_KEYS.SUBMISSIONS, filtered);
-    this.broadcastChange('submissions', 'delete', { id });
-    this.broadcastChange('submissions', 'setList', filtered);
     this.notify();
+
+    setTimeout(() => {
+      if (driveFileIds.length > 0) {
+        this.deleteFilesFromGoogleDrive(driveFileIds).catch(() => {});
+      }
+      this.broadcastChange('submissions', 'delete', { id });
+    }, 0);
+
     return true;
   }
 
@@ -1419,15 +1447,19 @@ export class StorageService {
       throw new Error('คุณไม่มีสิทธิ์ในการลบเอกสารนี้');
     }
 
-    if (target.file?.driveFileId) {
-      this.deleteFileFromGoogleDrive(target.file.driveFileId);
-    }
+    const driveFileId = target.file?.driveFileId;
 
     const filtered = docs.filter(d => d.id !== id);
     safeSetLocalStorage(STORAGE_KEYS.DOCUMENTS, filtered);
-    this.broadcastChange('documents', 'delete', { id });
-    this.broadcastChange('documents', 'setList', filtered);
     this.notify();
+
+    setTimeout(() => {
+      if (driveFileId) {
+        this.deleteFileFromGoogleDrive(driveFileId).catch(() => {});
+      }
+      this.broadcastChange('documents', 'delete', { id });
+    }, 0);
+
     return true;
   }
 
@@ -1507,10 +1539,12 @@ export class StorageService {
     const announcements = this.getAnnouncements().filter(
       a => a.id !== id && (!title || a.title !== title)
     );
-    localStorage.setItem(STORAGE_KEYS.ANNOUNCEMENTS, JSON.stringify(announcements));
-    this.broadcastChange('announcements', 'delete', { id, title });
-    this.broadcastChange('announcements', 'setList', announcements);
+    safeSetLocalStorage(STORAGE_KEYS.ANNOUNCEMENTS, announcements);
     this.notify();
+
+    setTimeout(() => {
+      this.broadcastChange('announcements', 'delete', { id, title });
+    }, 0);
   }
 
   // --- School Profile ---
@@ -1638,18 +1672,22 @@ export class StorageService {
     const target = websites.find(w => w.id === id);
     if (!target) return false;
 
-    // If website image was uploaded to Google Drive, delete file from Google Drive folder
-    if (target.driveFileId) {
-      this.deleteFilesFromGoogleDrive([target.driveFileId]);
-    }
+    const driveFileId = target.driveFileId;
 
     const filtered = websites.filter(w => w.id !== id);
     const reindexed = filtered.map((w, index) => ({ ...w, order: index + 1 }));
     this.inMemoryWebsites = reindexed;
     safeSetLocalStorage(STORAGE_KEYS.WEBSITES, reindexed);
-    this.broadcastChange('websites', 'delete', { id });
-    this.broadcastChange('websites', 'setList', reindexed);
     this.notify();
+
+    setTimeout(() => {
+      if (driveFileId) {
+        this.deleteFilesFromGoogleDrive([driveFileId]).catch(() => {});
+      }
+      this.broadcastChange('websites', 'delete', { id });
+      this.broadcastChange('websites', 'setList', reindexed);
+    }, 0);
+
     return true;
   }
 

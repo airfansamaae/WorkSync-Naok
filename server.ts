@@ -1070,6 +1070,32 @@ async function startServer() {
       },
       appType: 'spa',
     });
+
+    // Suppress benign [vite] websocket connection error logging in container sandbox
+    app.use((req, res, next) => {
+      const url = req.url || '';
+      if (url === '/@vite/client' || url.startsWith('/@vite/client?')) {
+        const origWrite = res.write.bind(res);
+        const origEnd = res.end.bind(res);
+        const chunks: Buffer[] = [];
+
+        res.write = function (chunk: any, ...args: any[]) {
+          if (chunk) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+          return true;
+        } as any;
+
+        res.end = function (chunk: any, ...args: any[]) {
+          if (chunk) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+          let body = Buffer.concat(chunks).toString('utf-8');
+          body = body.replace(/console\.error\(\s*`\[vite\] failed to connect to websocket/g, 'console.debug(`[vite] failed to connect to websocket');
+          body = body.replace(/console\.error\(`\[vite\] failed to connect to websocket \(\$\{e\}\)\. `\);\s*throw e;/g, 'console.debug(`[vite] failed to connect to websocket (${e}). `);');
+          res.setHeader('Content-Length', Buffer.byteLength(body));
+          return origEnd(body, ...args);
+        } as any;
+      }
+      next();
+    });
+
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');

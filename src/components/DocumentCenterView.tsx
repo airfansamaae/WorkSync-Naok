@@ -27,6 +27,7 @@ import {
 import { storage, triggerDirectDownload } from '../services/storageService';
 import { ensureGoogleDriveConnected, ROOT_DRIVE_FOLDER_ID } from '../services/googleDriveService';
 import { saveFileToIndexedDb } from '../utils/indexedFileStore';
+import { parseDocxBinary } from '../utils/docxParser';
 import Swal from 'sweetalert2';
 import { formatThaiDate } from '../lib/dateUtils';
 
@@ -73,12 +74,32 @@ export const DocumentCenterView: React.FC<DocumentCenterViewProps> = ({
     else if (lower.match(/\.(pptx|ppt)$/)) previewType = 'presentation';
     else if (lower.match(/\.(docx|doc)$/)) previewType = 'doc';
 
+    let genuineContent = '';
+    try {
+      if (previewType === 'doc') {
+        const arrayBuffer = await file.arrayBuffer();
+        const parsed = await parseDocxBinary(arrayBuffer);
+        if (parsed && parsed.rawText) {
+          genuineContent = parsed.rawText;
+        }
+      }
+    } catch (e) {
+      console.warn('Doc preview extraction notice:', e);
+    }
+
     const tempFileId = 'temp_doc_' + Date.now();
     await saveFileToIndexedDb(tempFileId, dataUrl, file, {
       name: file.name,
       size: file.size,
       mimeType: file.type,
     });
+    if (file.name) {
+      saveFileToIndexedDb(file.name, dataUrl, file, {
+        name: file.name,
+        size: file.size,
+        mimeType: file.type,
+      }).catch(() => {});
+    }
 
     const tempUploadedFile: UploadedFile = {
       id: tempFileId,
@@ -90,7 +111,7 @@ export const DocumentCenterView: React.FC<DocumentCenterViewProps> = ({
       downloadUrl: '',
       viewUrl: '',
       previewType,
-      previewContent: file.name.replace(/\.[^/.]+$/, ''),
+      previewContent: genuineContent || file.name.replace(/\.[^/.]+$/, ''),
       fileDataUrl: dataUrl,
       uploadedAt: new Date().toISOString(),
     };

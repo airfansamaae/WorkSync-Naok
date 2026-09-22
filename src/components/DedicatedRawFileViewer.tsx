@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { 
   Download, 
   X, 
@@ -17,14 +17,15 @@ import {
   Eye
 } from 'lucide-react';
 import { UploadedFile } from '../types';
-import { triggerDirectDownload, storage, getSeedBinary } from '../services/storageService';
+import { triggerDirectDownload, saveBlobDirectly, storage, getSeedBinary } from '../services/storageService';
 import { INITIAL_DOCUMENTS, INITIAL_SUBMISSIONS } from '../data/initialData';
 import { renderAsync } from 'docx-preview';
 import * as XLSX from 'xlsx';
 import { parseDocxBinary, DocxParsedPage, DocxElement } from '../utils/docxParser';
 import { getSafeGoogleDrivePreviewUrl, openAuthenticFileInNewTab } from '../utils/fileViewer';
-import { getActivePreviewFromIndexedDb, getFileFromIndexedDb } from '../utils/indexedFileStore';
+import { getActivePreviewFromIndexedDb, getFileFromIndexedDb, saveFileToIndexedDb } from '../utils/indexedFileStore';
 import { getFileBase64FromGas } from '../services/googleDriveService';
+import Swal from 'sweetalert2';
 
 /**
  * Enhanced helper to split text preview content into structured A4 pages
@@ -237,49 +238,70 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
     }
   };
 
+  // Auto-fit to screen width for A4 pages (210 × 297 mm)
+  const fitToScreenWidth = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const containerWidth = container.clientWidth;
+    // Standard A4 width is 794px at 96 DPI. With 32px container padding:
+    const targetWidth = 794 + 32;
+    if (containerWidth < targetWidth) {
+      const fit = Math.max(45, Math.floor(((containerWidth - 24) / 794) * 100));
+      setZoomLevel(fit);
+    } else {
+      setZoomLevel(100);
+    }
+  }, []);
+
   // Scroll listener to update active page as user scrolls down
   const handleContainerScroll = () => {
     const container = scrollContainerRef.current;
     if (!container) return;
 
     // Check if user scrolled near the bottom of document
-    const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 40;
+    const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 50;
     if (isAtBottom && totalPages > 1) {
       setCurrentPageInView(totalPages);
       return;
     }
 
     const containerRect = container.getBoundingClientRect();
-    // Use trigger line at 30% down the container viewport
-    const triggerPoint = containerRect.top + Math.min(220, containerRect.height * 0.3);
+    // Use reader focus trigger line at ~32% down the container viewport
+    const triggerPoint = containerRect.top + Math.min(240, containerRect.height * 0.32);
 
     let activePage = 1;
     let found = false;
 
     if (pageDomMap.current.size > 0) {
-      pageDomMap.current.forEach((el, pageNum) => {
+      const keys = Array.from(pageDomMap.current.keys()) as number[];
+      const sortedPages = keys.sort((a, b) => a - b);
+      for (const pageNum of sortedPages) {
+        const el = pageDomMap.current.get(pageNum);
+        if (!el) continue;
         const rect = el.getBoundingClientRect();
-        if (rect.top <= triggerPoint && rect.bottom >= containerRect.top) {
+
+        if (rect.top <= triggerPoint && rect.bottom >= triggerPoint) {
           activePage = pageNum;
           found = true;
-
-          // If a section is taller than 1.3 standard A4 pages
-          const a4HeightPx = (el.offsetWidth * 297) / 210 || 1122.5;
-          if (el.offsetHeight > a4HeightPx * 1.3) {
-            const scrolledInside = triggerPoint - rect.top;
-            const subPageOffset = Math.floor(scrolledInside / a4HeightPx);
-            if (subPageOffset > 0) {
-              activePage = Math.min(totalPages, pageNum + subPageOffset);
-            }
-          }
+          break;
         }
-      });
+
+        if (rect.top > triggerPoint) {
+          activePage = Math.max(1, pageNum - 1);
+          found = true;
+          break;
+        }
+
+        activePage = pageNum;
+      }
     }
 
-    if (!found) {
-      const a4HeightPx = 1122.5 * (zoomLevel / 100);
-      const calculated = Math.floor((container.scrollTop + 100) / (a4HeightPx + 28)) + 1;
-      activePage = Math.min(totalPages, Math.max(1, calculated));
+    if (!found && totalPages > 1) {
+      const maxScroll = container.scrollHeight - container.clientHeight;
+      if (maxScroll > 0) {
+        const fraction = container.scrollTop / maxScroll;
+        activePage = Math.min(totalPages, Math.max(1, Math.floor(fraction * totalPages) + 1));
+      }
     }
 
     setCurrentPageInView(activePage);
@@ -287,24 +309,79 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
 
   const scrollToPage = (pageNum: number) => {
     if (pageNum < 1 || pageNum > totalPages) return;
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
     const targetEl = pageDomMap.current.get(pageNum);
-    if (targetEl && scrollContainerRef.current) {
-      const containerRect = scrollContainerRef.current.getBoundingClientRect();
+    if (targetEl) {
+      const containerRect = container.getBoundingClientRect();
       const elRect = targetEl.getBoundingClientRect();
-      const scrollOffset = elRect.top - containerRect.top + scrollContainerRef.current.scrollTop - 20;
-      scrollContainerRef.current.scrollTo({
+      const scrollOffset = elRect.top - containerRect.top + container.scrollTop - 20;
+      container.scrollTo({
         top: Math.max(0, scrollOffset),
         behavior: 'smooth'
       });
       setCurrentPageInView(pageNum);
-    } else if (scrollContainerRef.current) {
-      const a4HeightPx = 1122.5 * (zoomLevel / 100);
-      scrollContainerRef.current.scrollTo({
-        top: (pageNum - 1) * (a4HeightPx + 28),
-        behavior: 'smooth'
-      });
-      setCurrentPageInView(pageNum);
+    } else {
+      const maxScroll = container.scrollHeight - container.clientHeight;
+      if (maxScroll > 0) {
+        const targetScroll = ((pageNum - 1) / Math.max(1, totalPages - 1)) * maxScroll;
+        container.scrollTo({
+          top: targetScroll,
+          behavior: 'smooth'
+        });
+        setCurrentPageInView(pageNum);
+      }
     }
+  };
+
+  // Dedicated original binary file download handler
+  const handleDownloadOriginalFile = async () => {
+    if (!file) return;
+
+    // 1. Direct active ArrayBuffer (instantaneous byte-perfect original download)
+    if (docxArrayBuffer && docxArrayBuffer.byteLength > 0) {
+      const lower = (file.name || '').toLowerCase();
+      const mime = lower.endsWith('.doc')
+        ? 'application/msword'
+        : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      const blob = new Blob([docxArrayBuffer], { type: mime });
+      saveBlobDirectly(blob, file.name);
+      Swal.fire({
+        icon: 'success',
+        title: 'ดาวน์โหลดไฟล์ต้นฉบับสำเร็จ',
+        text: file.name,
+        toast: true,
+        position: 'top-end',
+        timer: 2000,
+        showConfirmButton: false,
+      });
+      return;
+    }
+
+    // 2. Direct Blob URL in memory
+    if (blobUrl && blobUrl.startsWith('blob:')) {
+      try {
+        const resp = await fetch(blobUrl);
+        const b = await resp.blob();
+        if (b && b.size > 0) {
+          saveBlobDirectly(b, file.name);
+          Swal.fire({
+            icon: 'success',
+            title: 'ดาวน์โหลดไฟล์ต้นฉบับสำเร็จ',
+            text: file.name,
+            toast: true,
+            position: 'top-end',
+            timer: 2000,
+            showConfirmButton: false,
+          });
+          return;
+        }
+      } catch {}
+    }
+
+    // 3. Multi-tier universal downloader
+    await triggerDirectDownload(file);
   };
 
   // 1. Multi-tier resolution to guarantee authentic raw file is retrieved without fail
@@ -677,6 +754,22 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
           }
         }
 
+        // Fast-path: Check IndexedDB by id, driveFileId, or file name
+        if (!rawBase64) {
+          const candidateKeys = [file.id, file.driveFileId, file.name].filter(Boolean) as string[];
+          for (const k of candidateKeys) {
+            try {
+              const idbRecord = await getFileFromIndexedDb(k);
+              if (idbRecord?.dataUrl) {
+                const parts = idbRecord.dataUrl.split(';base64,');
+                mimeType = parts[0].replace('data:', '') || mimeType;
+                rawBase64 = parts[1] || idbRecord.dataUrl;
+                break;
+              }
+            } catch {}
+          }
+        }
+
         // If rawBase64 is still missing, fetch from server endpoints
         if (!rawBase64 && (file.id || file.driveFileId)) {
           const fetchId = file.id || file.driveFileId;
@@ -782,6 +875,23 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
             setBlobUrl(currentBlobUrl);
             binaryDecoded = true;
 
+            const fullDataUrl = `data:${mimeType};base64,${cleanBase64}`;
+            setFile((prev) => (prev ? { ...prev, fileDataUrl: fullDataUrl } : prev));
+            if (file.id) {
+              saveFileToIndexedDb(file.id, fullDataUrl, blob, {
+                name: file.name,
+                size: file.size,
+                mimeType,
+              }).catch(() => {});
+            }
+            if (file.name) {
+              saveFileToIndexedDb(file.name, fullDataUrl, blob, {
+                name: file.name,
+                size: file.size,
+                mimeType,
+              }).catch(() => {});
+            }
+
             // Render Word Document (.docx)
             if (isDocx) {
               setDocxArrayBuffer(arrayBuffer);
@@ -854,12 +964,36 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
     ? (docxRenderMode === 'fallback' ? (parsedPages.length || 1) : docxPreviewPagesCount)
     : (parsedPages.length || (isPdf ? 1 : 1));
 
-  // Render Word document via docx-preview if arrayBuffer is present
+  // Render Word document via docx-preview or fallback parser
   useEffect(() => {
     let isMounted = true;
     if (isDocx && docxArrayBuffer && docxContainerRef.current) {
       docxContainerRef.current.innerHTML = '';
       setDocxRenderMode('loading');
+
+      // Detect if docxArrayBuffer is a standard ZIP archive (PK\x03\x04)
+      const u8 = new Uint8Array(docxArrayBuffer);
+      const isZip = u8.length >= 4 && u8[0] === 0x50 && u8[1] === 0x4B && u8[2] === 0x03 && u8[3] === 0x04;
+
+      if (!isZip) {
+        // Legacy .doc binary or HTML disguised as doc: parse with parseDocxBinary directly
+        parseDocxBinary(docxArrayBuffer).then((result) => {
+          if (!isMounted) return;
+          if (result && result.pages && result.pages.length > 0) {
+            setParsedPages(result.pages);
+            setDocxPreviewPagesCount(result.pages.length);
+            setDocxRenderMode('fallback');
+          } else {
+            setParsedPages(createA4PagesFromText(file?.previewContent || file?.name || 'เอกสาร Word', file?.name));
+            setDocxPreviewPagesCount(1);
+            setDocxRenderMode('fallback');
+          }
+          setCurrentPageInView(1);
+          setTimeout(() => fitToScreenWidth(), 100);
+        });
+        return;
+      }
+
       renderAsync(docxArrayBuffer, docxContainerRef.current, undefined, {
         className: 'docx',
         inWrapper: true,
@@ -882,22 +1016,46 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
 
           if (sections && sections.length > 0) {
             let runningPage = 0;
+            const a4HeightPx = 1122.5;
+
             sections.forEach((sec) => {
               sec.style.width = 'min(100%, 210mm)';
               sec.style.minHeight = '297mm';
               sec.style.boxSizing = 'border-box';
               sec.style.marginLeft = 'auto';
               sec.style.marginRight = 'auto';
+              sec.style.position = 'relative';
 
-              const a4HeightPx = 1122.5;
               const pagesInSec = Math.max(1, Math.round(sec.offsetHeight / a4HeightPx));
 
-              for (let p = 0; p < pagesInSec; p++) {
-                runningPage++;
-                if (p === 0) {
-                  sec.setAttribute('data-page-index', String(runningPage));
-                  registerPageRef(runningPage, sec as HTMLDivElement);
+              runningPage++;
+              sec.setAttribute('data-page-index', String(runningPage));
+              registerPageRef(runningPage, sec as HTMLDivElement);
+
+              if (pagesInSec > 1) {
+                for (let p = 1; p < pagesInSec; p++) {
+                  const subPageNum = runningPage + p;
+                  const divider = document.createElement('div');
+                  divider.className = 'docx-page-boundary-anchor';
+                  divider.setAttribute('data-page-index', String(subPageNum));
+                  divider.style.position = 'absolute';
+                  divider.style.top = `${p * a4HeightPx}px`;
+                  divider.style.left = '0';
+                  divider.style.width = '100%';
+                  divider.style.pointerEvents = 'none';
+                  divider.innerHTML = `
+                    <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin:-10px 0 0 0;font-family:'TH Sarabun New',Sarabun,sans-serif;font-size:12px;color:#64748b;user-select:none;">
+                      <div style="flex:1;height:1px;background:#cbd5e1;"></div>
+                      <span style="background:#ffffff;border:1px solid #cbd5e1;padding:2px 10px;border-radius:12px;color:#334155;font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+                        หน้า ${subPageNum} (A4 210 × 297 มม.)
+                      </span>
+                      <div style="flex:1;height:1px;background:#cbd5e1;"></div>
+                    </div>
+                  `;
+                  sec.appendChild(divider);
+                  registerPageRef(subPageNum, divider as HTMLDivElement);
                 }
+                runningPage += (pagesInSec - 1);
               }
             });
 
@@ -910,6 +1068,7 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
           setParsedPages([]);
           setDocxRenderMode('docx-preview');
           setCurrentPageInView(1);
+          setTimeout(() => fitToScreenWidth(), 100);
         })
         .catch(async (err) => {
           if (!isMounted) return;
@@ -923,6 +1082,8 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
             } else {
               setDocxRenderMode('error');
             }
+            setCurrentPageInView(1);
+            setTimeout(() => fitToScreenWidth(), 100);
           } catch {
             setDocxRenderMode('error');
           }
@@ -931,7 +1092,18 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [isDocx, docxArrayBuffer]);
+  }, [isDocx, docxArrayBuffer, fitToScreenWidth]);
+
+  // Window resize listener to keep A4 fitted nicely
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 840) {
+        fitToScreenWidth();
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [fitToScreenWidth]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1093,37 +1265,81 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
           </div>
         </div>
 
-        {/* Center/Right: Zoom Controls, Download, Close */}
+        {/* Center/Right: Page Counter, View Mode, Zoom Controls, Download, Close */}
         <div className="flex items-center gap-2">
-          {/* Zoom Controls (for Word, Sheet, Image) */}
-          {(isDocx || isSheet || isImage) && (
-            <div className="hidden md:flex items-center bg-slate-800/80 border border-slate-700/80 rounded-xl p-1 gap-1">
+          {/* Word/Doc Page Counter Badge */}
+          {isDocx && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-800 border border-slate-700 rounded-lg text-xs select-none">
+              <FileText className="w-3.5 h-3.5 text-blue-400" />
+              <span className="text-slate-300">หน้า</span>
+              <span className="font-bold text-amber-300">{currentPageInView}</span>
+              <span className="text-slate-400">/{totalPages}</span>
+            </div>
+          )}
+
+          {/* Word/Doc View Mode Switcher */}
+          {isDocx && (
+            <div className="hidden sm:flex items-center bg-slate-800 border border-slate-700 rounded-lg p-0.5 text-xs select-none">
               <button
                 type="button"
-                onClick={() => setZoomLevel((prev) => Math.max(60, prev - 15))}
+                onClick={() => setDocxRenderMode('docx-preview')}
+                className={`px-2 py-0.5 rounded font-medium transition-colors cursor-pointer ${
+                  docxRenderMode === 'docx-preview'
+                    ? 'bg-purple-600 text-white'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                มุมมองต้นฉบับ
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (parsedPages.length === 0 && docxArrayBuffer) {
+                    const res = await parseDocxBinary(docxArrayBuffer);
+                    if (res?.pages?.length) setParsedPages(res.pages);
+                  }
+                  setDocxRenderMode('fallback');
+                }}
+                className={`px-2 py-0.5 rounded font-medium transition-colors cursor-pointer ${
+                  docxRenderMode === 'fallback'
+                    ? 'bg-purple-600 text-white'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                หน้ากระดาษ A4
+              </button>
+            </div>
+          )}
+
+          {/* Zoom Controls (for Word, Sheet, Image) with Fit-to-screen */}
+          {(isDocx || isSheet || isImage) && (
+            <div className="flex items-center bg-slate-800/80 border border-slate-700/80 rounded-xl p-1 gap-1">
+              <button
+                type="button"
+                onClick={() => setZoomLevel((prev) => Math.max(45, prev - 15))}
                 title="ย่อขนาด"
-                className="p-1.5 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition-colors cursor-pointer"
+                className="p-1 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition-colors cursor-pointer"
               >
                 <ZoomOut className="w-3.5 h-3.5" />
               </button>
-              <span className="text-[11px] font-mono font-medium text-slate-300 px-1 min-w-[42px] text-center">
+              <span className="text-[11px] font-mono font-medium text-slate-300 px-1 min-w-[36px] text-center">
                 {zoomLevel}%
               </span>
               <button
                 type="button"
                 onClick={() => setZoomLevel((prev) => Math.min(150, prev + 15))}
                 title="ขยายขนาด"
-                className="p-1.5 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition-colors cursor-pointer"
+                className="p-1 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition-colors cursor-pointer"
               >
                 <ZoomIn className="w-3.5 h-3.5" />
               </button>
               <button
                 type="button"
-                onClick={() => setZoomLevel(100)}
-                title="ขนาดพอดี (100%)"
-                className="px-2 py-1 text-[11px] font-medium text-slate-300 hover:bg-slate-700 hover:text-white rounded-lg transition-colors cursor-pointer"
+                onClick={fitToScreenWidth}
+                title="ปรับขนาดให้พอดีจอ"
+                className="px-2 py-0.5 text-[11px] font-medium text-purple-300 bg-purple-950/60 hover:bg-purple-900 border border-purple-500/40 rounded-lg transition-colors cursor-pointer"
               >
-                100%
+                พอดีจอ
               </button>
             </div>
           )}
@@ -1140,8 +1356,8 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
             <button
               type="button"
               id="btn-single-download"
-              onClick={() => triggerDirectDownload(file)}
-              title="ดาวน์โหลดไฟล์ต้นฉบับ"
+              onClick={handleDownloadOriginalFile}
+              title="ดาวน์โหลดไฟล์ต้นฉบับแท้"
               className="inline-flex items-center gap-2 px-3.5 sm:px-4 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-lg shadow-emerald-950/50 transition-all cursor-pointer shrink-0"
             >
               <Download className="w-4 h-4" />

@@ -451,6 +451,13 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
       size: file.size,
       mimeType: file.type,
     });
+    if (file.name) {
+      saveFileToIndexedDb(file.name, dataUrl, file, {
+        name: file.name,
+        size: file.size,
+        mimeType: file.type,
+      }).catch(() => {});
+    }
 
     const tempUploadedFile: UploadedFile = {
       id: tempFileId,

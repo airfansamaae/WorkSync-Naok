@@ -180,9 +180,21 @@ export async function parseDocxBinary(
           const szMatch = rContent.match(/<w:sz\s+[^>]*w:val="([^"]+)"/);
           const fontSizePt = szMatch ? Math.round(parseInt(szMatch[1], 10) / 2) : 16;
 
-          const tMatch = rContent.match(/<w:t(?:\s+[^>]*)?>([\s\S]*?)<\/w:t>/);
-          if (tMatch) {
-            const text = tMatch[1]
+          let runText = '';
+          const tRegex = /<w:t(?:\s+[^>]*)?>([\s\S]*?)<\/w:t>/g;
+          let tM: RegExpExecArray | null;
+          while ((tM = tRegex.exec(rContent)) !== null) {
+            runText += tM[1];
+          }
+          if (/<w:tab\s*\/?>/.test(rContent)) {
+            runText = '    ' + runText;
+          }
+          if (/<w:br\s*\/?>/.test(rContent)) {
+            runText += '\n';
+          }
+
+          if (runText) {
+            const text = runText
               .replace(/&amp;/g, '&')
               .replace(/&lt;/g, '<')
               .replace(/&gt;/g, '>')
@@ -289,9 +301,21 @@ export async function parseDocxBinary(
               const fontSizePt = szMatch ? Math.round(parseInt(szMatch[1], 10) / 2) : undefined;
               if (fontSizePt && fontSizePt > maxFontSize) maxFontSize = fontSizePt;
 
-              const tMatch = rContent.match(/<w:t(?:\s+[^>]*)?>([\s\S]*?)<\/w:t>/);
-              if (tMatch) {
-                const text = tMatch[1]
+              let runText = '';
+              const tRegex = /<w:t(?:\s+[^>]*)?>([\s\S]*?)<\/w:t>/g;
+              let tM: RegExpExecArray | null;
+              while ((tM = tRegex.exec(rContent)) !== null) {
+                runText += tM[1];
+              }
+              if (/<w:tab\s*\/?>/.test(rContent)) {
+                runText = '    ' + runText;
+              }
+              if (/<w:br\s*\/?>/.test(rContent)) {
+                runText += '\n';
+              }
+
+              if (runText) {
+                const text = runText
                   .replace(/&amp;/g, '&')
                   .replace(/&lt;/g, '<')
                   .replace(/&gt;/g, '>')
@@ -512,7 +536,7 @@ export function parseNonDocxDocument(data: Uint8Array | ArrayBuffer): DocxParseR
         let count = 0;
         const maxLinesPerPage = 28;
 
-        for (const line of cleanLines.slice(0, 150)) {
+        for (const line of cleanLines) {
           curPage.elements.push({
             type: 'paragraph',
             align: 'left',

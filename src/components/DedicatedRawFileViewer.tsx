@@ -219,6 +219,8 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
   const [docxPreviewPagesCount, setDocxPreviewPagesCount] = useState<number>(1);
   const docxContainerRef = useRef<HTMLDivElement>(null);
   const lastRenderedBufferRef = useRef<ArrayBuffer | null>(null);
+  const processedFileKeyRef = useRef<string>('');
+  const lastRenderedKeyRef = useRef<string>('');
 
   // Dynamic Scroll Page Tracking (เมื่อเลื่อนลงมา ก็จะมีหน้าให้เห็นว่า อยู่หน้าที่เท่าไร)
   const [currentPageInView, setCurrentPageInView] = useState<number>(1);
@@ -743,7 +745,15 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
     let currentBlobUrl: string | null = null;
 
     const processFile = async () => {
-      setLoading(true);
+      const fileKey = `${file.id || ''}_${file.name || ''}_${file.fileDataUrl ? file.fileDataUrl.slice(0, 40) : ''}_${file.fileDataUrl?.length || 0}`;
+      if (processedFileKeyRef.current === fileKey && (docxArrayBuffer || parsedPages.length > 0 || blobUrl)) {
+        return;
+      }
+      processedFileKeyRef.current = fileKey;
+
+      if (!docxArrayBuffer && !blobUrl && parsedPages.length === 0) {
+        setLoading(true);
+      }
       setError(null);
 
       try {
@@ -882,7 +892,6 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
             binaryDecoded = true;
 
             const fullDataUrl = `data:${mimeType};base64,${cleanBase64}`;
-            setFile((prev) => (prev ? { ...prev, fileDataUrl: fullDataUrl } : prev));
             if (file.id) {
               saveFileToIndexedDb(file.id, fullDataUrl, blob, {
                 name: file.name,
@@ -901,7 +910,6 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
             // Render Word Document (.docx)
             if (isDocx) {
               setDocxArrayBuffer(arrayBuffer);
-              setDocxRenderMode('loading');
             } else if (isSheet) {
               // Render Excel Spreadsheet (.xlsx / .xls)
               try {
@@ -974,14 +982,13 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
   useEffect(() => {
     let isMounted = true;
     if (isDocx && docxArrayBuffer && docxContainerRef.current) {
-      // Guard against duplicate execution to eliminate lag and freezing
-      if (lastRenderedBufferRef.current === docxArrayBuffer && docxRenderMode !== 'idle') {
+      const docxKey = `${file?.id || ''}_${file?.name || ''}_${docxArrayBuffer.byteLength}`;
+      if (lastRenderedKeyRef.current === docxKey && docxRenderMode === 'docx-preview') {
+        setLoading(false);
         return;
       }
+      lastRenderedKeyRef.current = docxKey;
       lastRenderedBufferRef.current = docxArrayBuffer;
-
-      docxContainerRef.current.innerHTML = '';
-      setDocxRenderMode('loading');
 
       // Detect if docxArrayBuffer is a standard ZIP archive (PK\x03\x04)
       const u8 = new Uint8Array(docxArrayBuffer);
@@ -1001,27 +1008,34 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
             setDocxRenderMode('fallback');
           }
           setCurrentPageInView(1);
+          setLoading(false);
         }).catch(() => {
           if (!isMounted) return;
           setParsedPages(createA4PagesFromText(file?.previewContent || file?.name || 'เอกสาร Word', file?.name));
           setDocxPreviewPagesCount(1);
           setDocxRenderMode('fallback');
           setCurrentPageInView(1);
+          setLoading(false);
         });
         return;
       }
+
+      setDocxRenderMode('loading');
 
       renderAsync(docxArrayBuffer, docxContainerRef.current, undefined, {
         className: 'docx',
         inWrapper: true,
         ignoreWidth: false,
         ignoreHeight: false,
+        ignoreFonts: false,
         breakPages: true,
-        ignoreLastRenderedPageBreak: false,
+        ignoreLastRenderedPageBreak: true, // Prevents premature truncation of tables and pages
         renderHeaders: true,
         renderFooters: true,
         renderFootnotes: true,
         renderEndnotes: true,
+        renderChanges: false,
+        renderComments: false,
       })
         .then(() => {
           if (!isMounted) return;
@@ -1036,14 +1050,14 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
             const a4HeightPx = 1122.5;
 
             sections.forEach((sec) => {
-              sec.style.width = 'min(100%, 210mm)';
-              sec.style.minHeight = '297mm';
               sec.style.boxSizing = 'border-box';
               sec.style.marginLeft = 'auto';
               sec.style.marginRight = 'auto';
               sec.style.position = 'relative';
+              sec.style.overflow = 'visible';
 
-              const pagesInSec = Math.max(1, Math.round(sec.offsetHeight / a4HeightPx));
+              const secHeight = sec.offsetHeight || sec.clientHeight || a4HeightPx;
+              const pagesInSec = Math.max(1, Math.round(secHeight / a4HeightPx));
 
               runningPage++;
               sec.setAttribute('data-page-index', String(runningPage));
@@ -1076,6 +1090,7 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
           setParsedPages([]);
           setDocxRenderMode('docx-preview');
           setCurrentPageInView(1);
+          setLoading(false);
         })
         .catch(async (err) => {
           if (!isMounted) return;
@@ -1097,6 +1112,8 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
             setDocxPreviewPagesCount(1);
             setDocxRenderMode('fallback');
             setCurrentPageInView(1);
+          } finally {
+            setLoading(false);
           }
         });
     }
@@ -1142,6 +1159,24 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
     <div className={`${isModalMode ? 'fixed inset-0 z-[9999]' : 'h-screen w-screen relative'} flex flex-col bg-slate-950 text-slate-100 overflow-hidden font-sans select-none`}>
       {/* INJECTED STYLES FOR AUTHENTIC A4 SIZING, SARABUN FONT, BALANCED SYMMETRICAL MARGINS, & TABLE GRIDS */}
       <style>{`
+        /* Thai Font Aliases for authentic Word rendering */
+        @font-face {
+          font-family: 'TH Sarabun New';
+          src: local('TH Sarabun New'), local('THSarabunNew'), local('Sarabun');
+        }
+        @font-face {
+          font-family: 'TH Sarabun PSK';
+          src: local('TH Sarabun PSK'), local('THSarabunPSK'), local('Sarabun');
+        }
+        @font-face {
+          font-family: 'Angsana New';
+          src: local('Angsana New'), local('AngsanaUPC'), local('Sarabun');
+        }
+        @font-face {
+          font-family: 'Cordia New';
+          src: local('Cordia New'), local('CordiaUPC'), local('Sarabun');
+        }
+
         /* Authentic A4 Dimensions: 210mm × 297mm (21 × 29.7 ซม.) */
         /* Symmetrical balanced margins: pages are perfectly centered and fit screen seamlessly */
         .a4-page-sheet {
@@ -1162,10 +1197,10 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
           overflow: visible !important;
         }
 
-        /* docx-preview wrapper styling to enforce authentic A4 pagination, centered alignment, and Sarabun font */
+        /* docx-preview wrapper styling: keeps original document typography intact while centering on screen */
         .docx-wrapper {
           background: transparent !important;
-          padding: 0 !important;
+          padding: 16px 8px !important;
           display: flex !important;
           flex-direction: column !important;
           align-items: center !important;
@@ -1173,9 +1208,6 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
         }
         .docx-wrapper > section.docx,
         .docx-render-stage section {
-          width: min(100%, 210mm) !important;
-          max-width: 100% !important;
-          min-height: 297mm !important;
           margin: 16px auto 28px auto !important;
           background: #ffffff !important;
           color: #111827 !important;
@@ -1183,10 +1215,8 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
           box-sizing: border-box !important;
           position: relative !important;
           border-radius: 2px !important;
-          font-family: 'TH Sarabun New', 'TH Sarabun PSK', 'Sarabun', Tahoma, sans-serif !important;
-          font-size: 16pt !important;
-          line-height: 1.6 !important;
           overflow: visible !important;
+          max-width: 100% !important;
         }
         @media screen and (max-width: 860px) {
           .a4-page-sheet, 

@@ -1049,12 +1049,26 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
             let runningPage = 0;
             const a4HeightPx = 1122.5;
 
+            // Compute total pages across all sections first
+            let totalDocxPages = 0;
             sections.forEach((sec) => {
+              const secHeight = sec.offsetHeight || sec.clientHeight || a4HeightPx;
+              totalDocxPages += Math.max(1, Math.round(secHeight / a4HeightPx));
+            });
+            totalDocxPages = Math.max(sections.length, totalDocxPages);
+
+            sections.forEach((sec, sIdx) => {
               sec.style.boxSizing = 'border-box';
+              sec.style.width = 'min(100%, 210mm)';
+              sec.style.minHeight = '297mm';
               sec.style.marginLeft = 'auto';
               sec.style.marginRight = 'auto';
               sec.style.position = 'relative';
               sec.style.overflow = 'visible';
+
+              if (!sec.style.padding && !sec.style.paddingTop && !sec.style.paddingLeft) {
+                sec.style.padding = '25.4mm 20mm';
+              }
 
               const secHeight = sec.offsetHeight || sec.clientHeight || a4HeightPx;
               const pagesInSec = Math.max(1, Math.round(secHeight / a4HeightPx));
@@ -1063,6 +1077,7 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
               sec.setAttribute('data-page-index', String(runningPage));
               registerPageRef(runningPage, sec as HTMLDivElement);
 
+              // 1. Sub-page divider if section spans multiple A4 pages (e.g. continuous section or long table)
               if (pagesInSec > 1) {
                 for (let p = 1; p < pagesInSec; p++) {
                   const subPageNum = runningPage + p;
@@ -1074,14 +1089,42 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
                   divider.style.left = '0';
                   divider.style.width = '100%';
                   divider.style.pointerEvents = 'none';
+                  divider.style.zIndex = '20';
+                  divider.innerHTML = `
+                    <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin:-14px auto 0 auto;width:min(100%, 210mm);font-family:sans-serif;user-select:none;">
+                      <div style="flex:1;height:1px;background:#cbd5e1;"></div>
+                      <span style="background:#ffffff;border:1px solid #cbd5e1;padding:3px 14px;border-radius:9999px;color:#334155;font-weight:600;box-shadow:0 2px 6px rgba(0,0,0,0.08);font-size:11px;">
+                        เส้นคั่นแบ่งหน้ามาตรฐาน A4 (210 × 297 มม.) • หน้า ${subPageNum} / ${totalDocxPages}
+                      </span>
+                      <div style="flex:1;height:1px;background:#cbd5e1;"></div>
+                    </div>
+                  `;
                   sec.appendChild(divider);
                   registerPageRef(subPageNum, divider as HTMLDivElement);
                 }
                 runningPage += (pagesInSec - 1);
               }
+
+              // 2. Page separator between separate <section> elements
+              if (sIdx < sections.length - 1) {
+                const existingSep = sec.nextElementSibling;
+                if (!existingSep || !existingSep.classList.contains('docx-section-page-separator')) {
+                  const sep = document.createElement('div');
+                  sep.className = 'docx-section-page-separator';
+                  sep.style.cssText = 'width:min(100%, 210mm);margin:18px auto;display:flex;align-items:center;justify-content:center;gap:12px;user-select:none;pointer-events:none;';
+                  sep.innerHTML = `
+                    <div style="flex:1;height:1px;background:#334155;"></div>
+                    <span style="padding:4px 14px;background:#0f172a;border:1px solid #334155;border-radius:9999px;font-size:11px;color:#94a3b8;font-family:sans-serif;">
+                      เส้นคั่นแบ่งหน้ามาตรฐาน A4 (210 × 297 มม.) • หน้า ${runningPage + 1} / ${totalDocxPages}
+                    </span>
+                    <div style="flex:1;height:1px;background:#334155;"></div>
+                  `;
+                  sec.after(sep);
+                }
+              }
             });
 
-            const total = Math.max(sections.length, runningPage);
+            const total = Math.max(sections.length, runningPage, totalDocxPages);
             setDocxPreviewPagesCount(total);
           } else {
             setDocxPreviewPagesCount(1);
@@ -1184,7 +1227,7 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
           max-width: 100% !important;
           min-height: 297mm !important;
           margin: 16px auto 28px auto !important;
-          padding: 20mm 20mm 20mm 20mm !important;
+          padding: 25.4mm 20mm 25.4mm 20mm !important;
           box-sizing: border-box !important;
           background: #ffffff !important;
           color: #111827 !important;
@@ -1197,7 +1240,7 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
           overflow: visible !important;
         }
 
-        /* docx-preview wrapper styling: keeps original document typography intact while centering on screen */
+        /* docx-preview wrapper styling: enforces authentic A4 size (210 × 297 mm), centered alignment */
         .docx-wrapper {
           background: transparent !important;
           padding: 16px 8px !important;
@@ -1208,6 +1251,9 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
         }
         .docx-wrapper > section.docx,
         .docx-render-stage section {
+          width: min(100%, 210mm) !important;
+          max-width: 100% !important;
+          min-height: 297mm !important;
           margin: 16px auto 28px auto !important;
           background: #ffffff !important;
           color: #111827 !important;
@@ -1216,7 +1262,6 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
           position: relative !important;
           border-radius: 2px !important;
           overflow: visible !important;
-          max-width: 100% !important;
         }
         @media screen and (max-width: 860px) {
           .a4-page-sheet, 

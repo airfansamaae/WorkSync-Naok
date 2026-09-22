@@ -1087,8 +1087,8 @@ async function startServer() {
         res.end = function (chunk: any, ...args: any[]) {
           if (chunk) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
           let body = Buffer.concat(chunks).toString('utf-8');
-          body = body.replace(/console\.error\(\s*`\[vite\] failed to connect to websocket/g, 'console.debug(`[vite] failed to connect to websocket');
           body = body.replace(/console\.error\(`\[vite\] failed to connect to websocket \(\$\{e\}\)\. `\);\s*throw e;/g, 'console.debug(`[vite] failed to connect to websocket (${e}). `);');
+          body = body.replace(/console\.error\(\s*(["'`])\[vite\]/g, 'console.debug($1[vite]');
           res.setHeader('Content-Length', Buffer.byteLength(body));
           return origEnd(body, ...args);
         } as any;

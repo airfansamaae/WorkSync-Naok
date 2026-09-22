@@ -1,6 +1,60 @@
 <!doctype html>
 <html lang="th">
   <head>
+    <script>
+      (function() {
+        if (typeof window !== 'undefined' && window.WebSocket) {
+          var OrigWS = window.WebSocket;
+          window.WebSocket = function(url, protocols) {
+            var isVite = protocols === 'vite-hmr' || protocols === 'vite-ping' || 
+              (typeof url === 'string' && (url.indexOf('token=') !== -1 || url.indexOf('vite') !== -1));
+            if (isVite) {
+              return {
+                readyState: 1,
+                OPEN: 1,
+                CLOSED: 3,
+                CLOSING: 2,
+                CONNECTING: 0,
+                send: function() {},
+                close: function() {},
+                addEventListener: function(event, handler) {
+                  if (event === 'open' && typeof handler === 'function') {
+                    try { handler({ type: 'open' }); } catch(e) {}
+                  }
+                },
+                removeEventListener: function() {},
+                dispatchEvent: function() { return true; }
+              };
+            }
+            return new OrigWS(url, protocols);
+          };
+          window.WebSocket.prototype = OrigWS.prototype;
+          window.WebSocket.CONNECTING = 0;
+          window.WebSocket.OPEN = 1;
+          window.WebSocket.CLOSING = 2;
+          window.WebSocket.CLOSED = 3;
+        }
+
+        var isViteWsError = function(str) {
+          if (!str) return false;
+          var s = typeof str === 'string' ? str : (str.message || String(str));
+          return s.indexOf('[vite]') !== -1 || s.indexOf('WebSocket closed without opened') !== -1 || s.indexOf('failed to connect to websocket') !== -1;
+        };
+        var origError = console.error;
+        console.error = function() {
+          for (var i = 0; i < arguments.length; i++) {
+            if (isViteWsError(arguments[i])) return;
+          }
+          origError.apply(console, arguments);
+        };
+        window.addEventListener('unhandledrejection', function(event) {
+          if (event && event.reason && isViteWsError(event.reason)) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+          }
+        }, true);
+      })();
+    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#7c3aed" />

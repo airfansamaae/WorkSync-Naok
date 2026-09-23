@@ -279,15 +279,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
       if (isUserAdmin) {
         const assignSubs = submissions.filter((s) => s.assignmentId === assign.id);
-        if (assignSubs.length >= totalApprovedMembersCount) {
+        const isAllSubmitted = assign.isMarkedCompleted || assignSubs.length >= totalApprovedMembersCount;
+        if (isAllSubmitted) {
           statusColor = 'green';
-          label = 'ส่งครบ';
+          label = assign.isMarkedCompleted ? 'ส่งครบ (ยืนยัน)' : 'ส่งครบ';
         } else {
           statusColor = 'red';
           label = `${assignSubs.length}/${totalApprovedMembersCount} คน`;
         }
       } else {
-        if (userSubmittedAssignmentIds.has(assign.id)) {
+        const isCompletedForMember = assign.isMarkedCompleted || userSubmittedAssignmentIds.has(assign.id);
+        if (isCompletedForMember) {
           statusColor = 'green';
           label = 'ส่งแล้ว';
         } else {
@@ -360,13 +362,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     const submittedMemberIds = new Set(validSubs.map((s) => s.memberId));
 
     if (isUserAdmin) {
-      // For Admin: Count how many approved members submitted
+      // For Admin: Check if marked completed (by admin / paper) or if all target members have submitted
       const submittedCount = targetMembers.filter((m) => submittedMemberIds.has(m.id)).length;
-      const isAllSubmitted = targetMembers.length > 0
-        ? submittedCount >= targetMembers.length
-        : validSubs.length > 0;
+      const isAllSubmitted = !!a.isMarkedCompleted || (
+        targetMembers.length > 0
+          ? submittedCount >= targetMembers.length
+          : validSubs.length > 0
+      );
 
-      // If all members have submitted, it disappears automatically!
+      // If marked completed or all members have submitted, it disappears automatically!
       if (isAllSubmitted) return;
 
       // Show if within 30 days or if overdue with pending members
@@ -383,10 +387,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         });
       }
     } else {
-      // For Member: Check if current user has submitted
-      const hasMemberSubmitted = validSubs.some((s) => s.memberId === currentUser?.id);
+      // For Member: Check if marked completed (e.g. paper submission confirmed by Admin) or member has submitted
+      const hasMemberSubmitted = !!a.isMarkedCompleted || validSubs.some((s) => s.memberId === currentUser?.id);
 
-      // If member has submitted, it disappears automatically!
+      // If member has submitted or Admin confirmed completed, it disappears automatically!
       if (hasMemberSubmitted) return;
 
       // Show if within 30 days or overdue
@@ -875,8 +879,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
           <p className="text-xs text-slate-500">
             {isUserAdmin
-              ? 'งานที่ต้องส่งในระยะ 30 วัน และงานที่สมาชิกยังส่งไม่ครบ (จะหายไปทันทีเมื่อส่งครบทุกคน)'
-              : 'งานที่ต้องส่งในระยะ 30 วัน และงานที่คุณยังค้างส่ง (จะหายไปทันทีเมื่อคุณส่งงานแล้ว)'}
+              ? 'งานที่ต้องส่งในระยะ 30 วัน และงานที่สมาชิกยังส่งไม่ครบ (จะหายไปอัตโนมัติเมื่อส่งครบทุกคน หรือยืนยันส่งครบ)'
+              : 'งานที่ต้องส่งในระยะ 30 วัน และงานที่คุณยังค้างส่ง (จะหายไปอัตโนมัติเมื่อคุณส่งงานแล้ว หรือได้รับการยืนยันส่งครบ)'}
           </p>
 
           {/* List of Uniformly Sized Cards */}
@@ -1034,6 +1038,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   {modalDateData.assignments.map((assignment) => {
                     const assignSubs = submissions.filter((s) => s.assignmentId === assignment.id);
                     const isSubmittedByMe = userSubmittedAssignmentIds.has(assignment.id);
+                    const isCompletedForMember = isSubmittedByMe || !!assignment.isMarkedCompleted;
+                    const isAllSubmittedForAdmin = !!assignment.isMarkedCompleted || assignSubs.length >= totalApprovedMembersCount;
 
                     return (
                       <div
@@ -1046,18 +1052,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                               <span
                                 className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${
                                   isUserAdmin
-                                    ? assignSubs.length >= totalApprovedMembersCount
+                                    ? isAllSubmittedForAdmin
                                       ? 'bg-emerald-100 text-emerald-800'
                                       : 'bg-rose-100 text-rose-800'
-                                    : isSubmittedByMe
+                                    : isCompletedForMember
                                     ? 'bg-emerald-100 text-emerald-800'
                                     : 'bg-rose-100 text-rose-800'
                                 }`}
                               >
                                 {isUserAdmin
-                                  ? `ส่งแล้ว ${assignSubs.length}/${totalApprovedMembersCount} คน`
+                                  ? assignment.isMarkedCompleted
+                                    ? 'ส่งครบทุกคนแล้ว (กระดาษ/เสร็จสิ้น) ✓'
+                                    : isAllSubmittedForAdmin
+                                    ? 'ส่งครบทุกคนแล้ว ✓'
+                                    : `ส่งแล้ว ${assignSubs.length}/${totalApprovedMembersCount} คน`
                                   : isSubmittedByMe
                                   ? 'คุณส่งงานนี้แล้ว ✓'
+                                  : assignment.isMarkedCompleted
+                                  ? 'ส่งครบทุกคนแล้ว (กระดาษ/เสร็จสิ้น) ✓'
                                   : 'ยังไม่ได้ส่งงาน ⚠️'}
                               </span>
 

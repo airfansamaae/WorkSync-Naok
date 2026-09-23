@@ -385,12 +385,12 @@ export async function parseDocxBinary(
     }
 
     // Paginate into realistic A4 pages
-    // Standard A4 paper in TH Sarabun 16pt accommodates ~28-35 lines per page.
+    // Standard A4 paper in TH Sarabun 16pt accommodates ~24-28 lines per page.
     // Explicit page breaks (<w:br w:type="page"/> or <w:lastRenderedPageBreak/>) take precedence.
     const pages: DocxParsedPage[] = [];
     let currentPage: DocxParsedPage = { pageNumber: 1, elements: [] };
     let currentCostOnPage = 0;
-    const maxCostPerPage = 28;
+    const maxCostPerPage = 24;
 
     for (const el of elements) {
       const isBreak = el.type === 'paragraph' && el.isPageBreak;
@@ -398,29 +398,30 @@ export async function parseDocxBinary(
         pages.push(currentPage);
         currentPage = { pageNumber: pages.length + 1, elements: [] };
         currentCostOnPage = 0;
+        continue;
       }
 
-      currentPage.elements.push(el);
-      
       let cost = 1;
       if (el.type === 'table') {
-        cost = Math.max(3, Math.min(el.rows ? el.rows.length : 3, 20));
+        cost = Math.max(3, Math.min(el.rows ? el.rows.length : 3, 18));
       } else if (el.type === 'paragraph') {
         const textLen = el.runs.reduce((acc, r) => acc + (r.text?.length || 0), 0);
         if (textLen === 0) {
           cost = 0.5; // blank line takes small vertical space
         } else {
-          cost = Math.max(1, Math.ceil(textLen / 90)); // ~90 chars per TH Sarabun A4 line
+          cost = Math.max(1, Math.ceil(textLen / 80)); // ~80 chars per TH Sarabun A4 line
         }
       }
 
-      currentCostOnPage += cost;
-
-      if (currentCostOnPage >= maxCostPerPage) {
+      // If adding this element exceeds page capacity, start a new A4 page
+      if (currentCostOnPage + cost > maxCostPerPage && currentPage.elements.length > 0) {
         pages.push(currentPage);
         currentPage = { pageNumber: pages.length + 1, elements: [] };
         currentCostOnPage = 0;
       }
+
+      currentPage.elements.push(el);
+      currentCostOnPage += cost;
     }
 
     if (currentPage.elements.length > 0 || pages.length === 0) {

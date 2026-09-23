@@ -978,187 +978,45 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
     ? (docxRenderMode === 'fallback' ? (parsedPages.length || 1) : docxPreviewPagesCount)
     : (parsedPages.length || (isPdf ? 1 : 1));
 
-  // Render Word document via docx-preview or fallback parser (SINGLE AUTHENTIC A4 VIEW)
+  // Render Word document as authentic A4 sheets with distinct A4 page separator (SINGLE AUTHENTIC VIEW)
   useEffect(() => {
     let isMounted = true;
-    if (isDocx && docxArrayBuffer && docxContainerRef.current) {
+    if (isDocx && docxArrayBuffer) {
       const docxKey = `${file?.id || ''}_${file?.name || ''}_${docxArrayBuffer.byteLength}`;
-      if (lastRenderedKeyRef.current === docxKey && docxRenderMode === 'docx-preview') {
+      if (lastRenderedKeyRef.current === docxKey && docxRenderMode === 'fallback' && parsedPages.length > 0) {
         setLoading(false);
         return;
       }
       lastRenderedKeyRef.current = docxKey;
       lastRenderedBufferRef.current = docxArrayBuffer;
 
-      // Detect if docxArrayBuffer is a standard ZIP archive (PK\x03\x04)
-      const u8 = new Uint8Array(docxArrayBuffer);
-      const isZip = u8.length >= 4 && u8[0] === 0x50 && u8[1] === 0x4B && u8[2] === 0x03 && u8[3] === 0x04;
-
-      if (!isZip) {
-        // Legacy .doc binary or HTML disguised as doc: parse with parseDocxBinary directly
-        parseDocxBinary(docxArrayBuffer).then((result) => {
-          if (!isMounted) return;
-          if (result && result.pages && result.pages.length > 0) {
-            setParsedPages(result.pages);
-            setDocxPreviewPagesCount(result.pages.length);
-            setDocxRenderMode('fallback');
-          } else {
-            setParsedPages(createA4PagesFromText(file?.previewContent || file?.name || 'เอกสาร Word', file?.name));
-            setDocxPreviewPagesCount(1);
-            setDocxRenderMode('fallback');
-          }
-          setCurrentPageInView(1);
-          setLoading(false);
-        }).catch(() => {
-          if (!isMounted) return;
-          setParsedPages(createA4PagesFromText(file?.previewContent || file?.name || 'เอกสาร Word', file?.name));
-          setDocxPreviewPagesCount(1);
+      // Always parse with parseDocxBinary to produce authentic A4 pages (210 × 297 mm) with distinct page dividers
+      parseDocxBinary(docxArrayBuffer).then((result) => {
+        if (!isMounted) return;
+        if (result && result.pages && result.pages.length > 0) {
+          setParsedPages(result.pages);
+          setDocxPreviewPagesCount(result.pages.length);
           setDocxRenderMode('fallback');
           setCurrentPageInView(1);
           setLoading(false);
-        });
-        return;
-      }
-
-      setDocxRenderMode('loading');
-
-      renderAsync(docxArrayBuffer, docxContainerRef.current, undefined, {
-        className: 'docx',
-        inWrapper: true,
-        ignoreWidth: false,
-        ignoreHeight: false,
-        ignoreFonts: false,
-        breakPages: true,
-        ignoreLastRenderedPageBreak: true, // Prevents premature truncation of tables and pages
-        renderHeaders: true,
-        renderFooters: true,
-        renderFootnotes: true,
-        renderEndnotes: true,
-        renderChanges: false,
-        renderComments: false,
-      })
-        .then(() => {
-          if (!isMounted) return;
-          const container = docxContainerRef.current;
-          if (!container) return;
-
-          const sections = container.querySelectorAll('section');
-          pageDomMap.current.clear();
-
-          if (sections && sections.length > 0) {
-            let runningPage = 0;
-            const a4HeightPx = 1122.5;
-
-            // Compute total pages across all sections first
-            let totalDocxPages = 0;
-            sections.forEach((sec) => {
-              const secHeight = sec.offsetHeight || sec.clientHeight || a4HeightPx;
-              totalDocxPages += Math.max(1, Math.round(secHeight / a4HeightPx));
-            });
-            totalDocxPages = Math.max(sections.length, totalDocxPages);
-
-            sections.forEach((sec, sIdx) => {
-              sec.style.boxSizing = 'border-box';
-              sec.style.width = 'min(100%, 210mm)';
-              sec.style.minHeight = '297mm';
-              sec.style.marginLeft = 'auto';
-              sec.style.marginRight = 'auto';
-              sec.style.position = 'relative';
-              sec.style.overflow = 'visible';
-
-              if (!sec.style.padding && !sec.style.paddingTop && !sec.style.paddingLeft) {
-                sec.style.padding = '25.4mm 20mm';
-              }
-
-              const secHeight = sec.offsetHeight || sec.clientHeight || a4HeightPx;
-              const pagesInSec = Math.max(1, Math.round(secHeight / a4HeightPx));
-
-              runningPage++;
-              sec.setAttribute('data-page-index', String(runningPage));
-              registerPageRef(runningPage, sec as HTMLDivElement);
-
-              // 1. Sub-page divider if section spans multiple A4 pages (e.g. continuous section or long table)
-              if (pagesInSec > 1) {
-                for (let p = 1; p < pagesInSec; p++) {
-                  const subPageNum = runningPage + p;
-                  const divider = document.createElement('div');
-                  divider.className = 'docx-page-boundary-anchor';
-                  divider.setAttribute('data-page-index', String(subPageNum));
-                  divider.style.position = 'absolute';
-                  divider.style.top = `${p * a4HeightPx}px`;
-                  divider.style.left = '0';
-                  divider.style.width = '100%';
-                  divider.style.pointerEvents = 'none';
-                  divider.style.zIndex = '20';
-                  divider.innerHTML = `
-                    <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin:-14px auto 0 auto;width:min(100%, 210mm);font-family:sans-serif;user-select:none;">
-                      <div style="flex:1;height:1px;background:#cbd5e1;"></div>
-                      <span style="background:#ffffff;border:1px solid #cbd5e1;padding:3px 14px;border-radius:9999px;color:#334155;font-weight:600;box-shadow:0 2px 6px rgba(0,0,0,0.08);font-size:11px;">
-                        เส้นคั่นแบ่งหน้ามาตรฐาน A4 (210 × 297 มม.) • หน้า ${subPageNum} / ${totalDocxPages}
-                      </span>
-                      <div style="flex:1;height:1px;background:#cbd5e1;"></div>
-                    </div>
-                  `;
-                  sec.appendChild(divider);
-                  registerPageRef(subPageNum, divider as HTMLDivElement);
-                }
-                runningPage += (pagesInSec - 1);
-              }
-
-              // 2. Page separator between separate <section> elements
-              if (sIdx < sections.length - 1) {
-                const existingSep = sec.nextElementSibling;
-                if (!existingSep || !existingSep.classList.contains('docx-section-page-separator')) {
-                  const sep = document.createElement('div');
-                  sep.className = 'docx-section-page-separator';
-                  sep.style.cssText = 'width:min(100%, 210mm);margin:18px auto;display:flex;align-items:center;justify-content:center;gap:12px;user-select:none;pointer-events:none;';
-                  sep.innerHTML = `
-                    <div style="flex:1;height:1px;background:#334155;"></div>
-                    <span style="padding:4px 14px;background:#0f172a;border:1px solid #334155;border-radius:9999px;font-size:11px;color:#94a3b8;font-family:sans-serif;">
-                      เส้นคั่นแบ่งหน้ามาตรฐาน A4 (210 × 297 มม.) • หน้า ${runningPage + 1} / ${totalDocxPages}
-                    </span>
-                    <div style="flex:1;height:1px;background:#334155;"></div>
-                  `;
-                  sec.after(sep);
-                }
-              }
-            });
-
-            const total = Math.max(sections.length, runningPage, totalDocxPages);
-            setDocxPreviewPagesCount(total);
-          } else {
-            setDocxPreviewPagesCount(1);
-          }
-
-          setParsedPages([]);
-          setDocxRenderMode('docx-preview');
+        } else {
+          const fallbackPages = createA4PagesFromText(file?.previewContent || file?.name || 'เอกสาร Word', file?.name);
+          setParsedPages(fallbackPages);
+          setDocxPreviewPagesCount(fallbackPages.length);
+          setDocxRenderMode('fallback');
           setCurrentPageInView(1);
           setLoading(false);
-        })
-        .catch(async (err) => {
-          if (!isMounted) return;
-          console.warn('[DedicatedRawFileViewer] docx-preview renderAsync failed, trying fallback:', err);
-          try {
-            const result = await parseDocxBinary(docxArrayBuffer);
-            if (result && result.pages && result.pages.length > 0) {
-              setParsedPages(result.pages);
-              setDocxPreviewPagesCount(result.pages.length);
-              setDocxRenderMode('fallback');
-            } else {
-              setParsedPages(createA4PagesFromText(file?.previewContent || file?.name || 'เอกสาร Word', file?.name));
-              setDocxPreviewPagesCount(1);
-              setDocxRenderMode('fallback');
-            }
-            setCurrentPageInView(1);
-          } catch {
-            setParsedPages(createA4PagesFromText(file?.previewContent || file?.name || 'เอกสาร Word', file?.name));
-            setDocxPreviewPagesCount(1);
-            setDocxRenderMode('fallback');
-            setCurrentPageInView(1);
-          } finally {
-            setLoading(false);
-          }
-        });
+        }
+      }).catch((err) => {
+        if (!isMounted) return;
+        console.warn('[DedicatedRawFileViewer] parseDocxBinary failed, falling back to text A4:', err);
+        const fallbackPages = createA4PagesFromText(file?.previewContent || file?.name || 'เอกสาร Word', file?.name);
+        setParsedPages(fallbackPages);
+        setDocxPreviewPagesCount(fallbackPages.length);
+        setDocxRenderMode('fallback');
+        setCurrentPageInView(1);
+        setLoading(false);
+      });
     }
     return () => {
       isMounted = false;
@@ -1556,12 +1414,12 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
                             className="a4-page-sheet flex flex-col justify-start select-text relative mb-2"
                           >
                             {/* Official A4 Page Header with Page Number */}
-                            <div className="w-full flex justify-between items-center text-xs text-slate-400 font-sarabun border-b border-slate-200 pb-2 mb-4 select-none">
-                              <span className="truncate max-w-[70%] font-medium text-slate-500">
+                            <div className="w-full flex justify-between items-center text-xs text-slate-500 font-sarabun border-b border-slate-200 pb-2.5 mb-4 select-none">
+                              <span className="truncate max-w-[70%] font-medium text-slate-600">
                                 {file?.name || 'เอกสารทางวิชาการ'}
                               </span>
-                              <span className="px-2.5 py-0.5 bg-slate-100 rounded text-slate-700 font-semibold">
-                                หน้า {pageNum} / {parsedPages.length} (A4)
+                              <span className="px-3 py-1 bg-slate-100 rounded-full text-slate-700 font-semibold border border-slate-200">
+                                หน้า {pageNum} / {parsedPages.length} (ขนาด A4: 210 × 297 มม.)
                               </span>
                             </div>
 
@@ -1658,20 +1516,23 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
                             </div>
 
                             {/* Official A4 Page Footer */}
-                            <div className="w-full flex justify-between items-center text-[11pt] text-slate-400 font-sarabun border-t border-slate-200 pt-2 mt-4 select-none">
-                              <span>ขนาดกระดาษมาตรฐาน A4 (210 × 297 มม.)</span>
+                            <div className="w-full flex justify-between items-center text-[11pt] text-slate-500 font-sarabun border-t border-slate-200 pt-2.5 mt-4 select-none">
+                              <span>ขนาดกระดาษมาตรฐาน A4 (210 × 297 มิลลิเมตร)</span>
                               <span>โรงเรียนกระบี่วิทยานุสรณ์</span>
                             </div>
                           </div>
 
-                          {/* Symmetrical Page Break Separator between pages */}
+                          {/* Clear and distinct A4 Page Break Separator between pages (ขนาด 210 × 297 มม.) */}
                           {pageIdx < parsedPages.length - 1 && (
-                            <div className="w-full max-w-[210mm] flex items-center justify-center gap-3 my-4 text-slate-500 text-xs select-none">
-                              <div className="flex-1 h-px bg-slate-800" />
-                              <span className="px-3 py-1 bg-slate-900 border border-slate-700/60 rounded-full text-[11px] text-slate-400 font-sans">
-                                เส้นคั่นแบ่งหน้ามาตรฐาน A4 (210 × 297 มม.) • หน้า {pageNum} / {parsedPages.length}
-                              </span>
-                              <div className="flex-1 h-px bg-slate-800" />
+                            <div className="w-full max-w-[210mm] flex items-center justify-center gap-3 my-6 text-slate-400 select-none">
+                              <div className="flex-1 h-px bg-slate-700/80" />
+                              <div className="flex items-center gap-2.5 px-5 py-2 bg-slate-900 border border-slate-700/80 rounded-full shadow-lg">
+                                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
+                                <span className="text-xs font-semibold text-slate-200 font-sans tracking-wide">
+                                  ที่คั่นหน้ากระดาษ ขนาด A4 (210 × 297 มิลลิเมตร) • สิ้นสุดหน้าที่ {pageNum} / เริ่มหน้าที่ {pageNum + 1}
+                                </span>
+                              </div>
+                              <div className="flex-1 h-px bg-slate-700/80" />
                             </div>
                           )}
                         </div>

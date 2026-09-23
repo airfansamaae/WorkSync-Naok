@@ -77,7 +77,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   return (
-    <aside className="hidden md:flex w-72 bg-purple-50/60 backdrop-blur-sm border border-purple-200/80 rounded-3xl flex-col justify-between shrink-0 h-[calc(100vh-6rem)] sticky top-20 select-none shadow-sm overflow-hidden">
+    <aside className="hidden lg:flex w-72 bg-purple-50/60 backdrop-blur-sm border border-purple-200/80 rounded-3xl flex-col justify-between shrink-0 h-[calc(100vh-6rem)] sticky top-20 select-none shadow-sm overflow-hidden">
       {/* Upper Navigation Section */}
       <div className="p-4 space-y-1.5 overflow-y-auto">
         <div className="px-3 py-2 text-xs font-bold uppercase tracking-wider text-purple-800/80">

@@ -258,7 +258,7 @@ export default function App() {
       />
 
       {/* Main Container with Sticky Sidebar (Desktop) and Content Area */}
-      <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6 flex flex-col md:flex-row gap-6">
+      <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6 flex flex-col lg:flex-row gap-6">
         {/* 2. STICKY SIDEBAR (Desktop) */}
         <Sidebar
           activeTab={activeTab}
@@ -271,7 +271,7 @@ export default function App() {
         />
 
         {/* 3. MAIN CONTENT ROUTER VIEW */}
-        <main className="flex-1 min-w-0 pb-20 md:pb-6">
+        <main className="flex-1 min-w-0 pb-20 lg:pb-6">
           {activeTab === 'dashboard' && (
             <DashboardView
               currentUser={currentUser}
@@ -335,7 +335,7 @@ export default function App() {
       />
 
       {/* FOOTER BAR */}
-      <footer className="bg-white/80 border-t border-purple-100 py-3 px-4 text-center text-xs text-slate-500 hidden md:block">
+      <footer className="bg-white/80 border-t border-purple-100 py-3 px-4 text-center text-xs text-slate-500 hidden lg:block">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />

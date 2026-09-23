@@ -760,9 +760,126 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
+    <div className="assignments-tablet-container space-y-6 animate-in fade-in duration-300">
+      <style>{`
+        /* Dedicated Tablet Optimization (768px - 1023px) for Task Management */
+        @media screen and (min-width: 768px) and (max-width: 1023.98px) {
+          .assignments-tablet-container {
+            gap: 0.75rem !important;
+          }
+          .assignments-tablet-container .tablet-page-header {
+            padding: 0.625rem 0.875rem !important;
+            border-radius: 0.875rem !important;
+          }
+          .assignments-tablet-container .tablet-page-header h2 {
+            font-size: 0.95rem !important;
+          }
+          .assignments-tablet-container .tablet-page-header p {
+            font-size: 0.6875rem !important;
+          }
+          .assignments-tablet-container .tablet-subtabs {
+            padding: 0.25rem !important;
+            border-radius: 0.75rem !important;
+          }
+          .assignments-tablet-container .tablet-subtabs button {
+            padding: 0.35rem 0.625rem !important;
+            font-size: 0.7rem !important;
+          }
+          .assignments-tablet-container .tablet-list-box {
+            border-radius: 0.875rem !important;
+          }
+          .assignments-tablet-container .tablet-list-header {
+            padding: 0.45rem 0.75rem !important;
+            font-size: 0.7rem !important;
+          }
+          .assignments-tablet-container .tablet-items-list {
+            padding: 0.375rem !important;
+            gap: 0.375rem !important;
+          }
+          .assignments-tablet-container .tablet-items-list > * + * {
+            margin-top: 0.375rem !important;
+          }
+          .assignments-tablet-container .tablet-card-item {
+            padding: 0.375rem 0.625rem !important;
+            gap: 0.25rem !important;
+            border-radius: 0.625rem !important;
+            border-left-width: 3px !important;
+          }
+          .assignments-tablet-container .tablet-card-item .tablet-card-row {
+            gap: 0.375rem !important;
+          }
+          .assignments-tablet-container .tablet-card-item .tablet-title {
+            font-size: 0.75rem !important;
+            line-height: 1.15rem !important;
+            font-weight: 600 !important;
+          }
+          .assignments-tablet-container .tablet-card-item .tablet-badge {
+            font-size: 0.5625rem !important;
+            padding: 0.1rem 0.35rem !important;
+            border-radius: 0.25rem !important;
+            line-height: 1 !important;
+          }
+          .assignments-tablet-container .tablet-card-item .tablet-date {
+            font-size: 0.625rem !important;
+            line-height: 1 !important;
+          }
+          .assignments-tablet-container .tablet-card-item .tablet-date svg {
+            width: 0.625rem !important;
+            height: 0.625rem !important;
+          }
+          .assignments-tablet-container .tablet-card-item .tablet-actions {
+            gap: 0.25rem !important;
+          }
+          .assignments-tablet-container .tablet-card-item .tablet-btn {
+            padding: 0.2rem 0.45rem !important;
+            font-size: 0.625rem !important;
+            border-radius: 0.375rem !important;
+            gap: 0.25rem !important;
+            line-height: 1 !important;
+          }
+          .assignments-tablet-container .tablet-card-item .tablet-btn svg {
+            width: 0.6875rem !important;
+            height: 0.6875rem !important;
+          }
+          .assignments-tablet-container .tablet-card-item .tablet-icon-btn {
+            padding: 0.2rem !important;
+            border-radius: 0.375rem !important;
+          }
+          .assignments-tablet-container .tablet-card-item .tablet-icon-btn svg {
+            width: 0.6875rem !important;
+            height: 0.6875rem !important;
+          }
+          .assignments-tablet-container .tablet-card-item .tablet-footer {
+            padding-top: 0.2rem !important;
+            margin-top: 0.1rem !important;
+            font-size: 0.625rem !important;
+          }
+          .assignments-tablet-container .tablet-card-item .tablet-footer svg {
+            width: 0.6875rem !important;
+            height: 0.6875rem !important;
+          }
+          /* Tablet Announcement Cards */
+          .assignments-tablet-container .tablet-announcement-item {
+            padding: 0.45rem 0.625rem !important;
+            gap: 0.25rem !important;
+            border-radius: 0.625rem !important;
+            border-left-width: 3px !important;
+          }
+          .assignments-tablet-container .tablet-announcement-item h4 {
+            font-size: 0.75rem !important;
+            line-height: 1.15rem !important;
+            font-weight: 600 !important;
+          }
+          .assignments-tablet-container .tablet-announcement-item p {
+            font-size: 0.6875rem !important;
+            padding: 0.3rem !important;
+            border-radius: 0.375rem !important;
+          }
+        }
+      `}</style>
+
       {/* Page Header */}
-      <div className="bg-white rounded-2xl p-4 sm:p-5 border border-purple-100 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="tablet-page-header bg-white rounded-2xl p-4 sm:p-5 border border-purple-100 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <h2 className="text-lg sm:text-xl font-bold text-slate-900 leading-none">
@@ -813,7 +930,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
       </div>
 
       {/* Sub Tabs: 1. งานที่มอบหมาย vs 2. ประกาศ & วันที่จัดกิจกรรม */}
-      <div className="flex gap-2 p-1.5 bg-white rounded-2xl border border-purple-100 shadow-2xs">
+      <div className="tablet-subtabs flex gap-2 p-1.5 bg-white rounded-2xl border border-purple-100 shadow-2xs">
         <button
           onClick={() => setActiveSubTab('assignments')}
           className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
@@ -851,8 +968,8 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
 
       {/* TAB 1: ASSIGNMENTS LIST VIEW */}
       {activeSubTab === 'assignments' && (
-        <div className="bg-white rounded-2xl border border-purple-100 shadow-xs overflow-hidden">
-          <div className="px-5 py-3.5 bg-slate-50/80 border-b border-slate-200 flex items-center justify-between">
+        <div className="tablet-list-box bg-white rounded-2xl border border-purple-100 shadow-xs overflow-hidden">
+          <div className="tablet-list-header px-5 py-3.5 bg-slate-50/80 border-b border-slate-200 flex items-center justify-between">
             <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
               รายการงานวิชาการ ({assignments.length} รายการ - เรียงกำหนดส่งใกล้ถึงก่อน)
             </span>
@@ -869,7 +986,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
           </div>
 
           {/* Minimal List Items with spacing */}
-          <div className="p-3 sm:p-4 space-y-3">
+          <div className="tablet-items-list p-3 sm:p-4 space-y-3">
             {assignments.length === 0 ? (
               <div className="p-8 text-center text-xs text-slate-400">
                 ยังไม่มีงานที่มอบหมายในขณะนี้
@@ -926,19 +1043,19 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                   return (
                     <div
                       key={assignment.id}
-                      className={`p-3 sm:p-3.5 rounded-xl border flex flex-col gap-2 transition-all hover:shadow-xs ${
+                      className={`tablet-card-item p-3 sm:p-3.5 rounded-xl border flex flex-col gap-2 transition-all hover:shadow-xs ${
                         isCompleted 
                           ? 'border-emerald-300 border-l-4 border-l-emerald-500 bg-emerald-50/20' 
                           : 'border-purple-200 border-l-4 border-l-purple-600 bg-white'
                       }`}
                     >
                       {/* Card Top: Details & Actions */}
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                      <div className="tablet-card-row flex flex-col md:flex-row md:items-center justify-between gap-3">
                         {/* Left Info */}
                         <div className="space-y-1 min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span
-                              className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                              className={`tablet-badge text-[10px] font-bold px-2 py-0.5 rounded-md ${
                                 isCompleted
                                   ? 'bg-emerald-100 text-emerald-800'
                                   : 'bg-purple-100 text-purple-800'
@@ -957,19 +1074,19 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                                 : 'ยังไม่ได้ส่ง (กำหนดส่ง)'}
                             </span>
 
-                            <span className="text-[11px] text-slate-500 flex items-center gap-1">
+                            <span className="tablet-date text-[11px] text-slate-500 flex items-center gap-1">
                               <Calendar className="w-3 h-3 text-slate-400" />
                               <span>กำหนด: {formatThaiDateRange(assignment.dueDateStart, assignment.dueDateEnd)}</span>
                             </span>
                           </div>
 
-                          <h3 className="text-xs sm:text-sm font-bold text-slate-900 leading-snug">
+                          <h3 className="tablet-title text-xs sm:text-sm font-bold text-slate-900 leading-snug">
                             {assignment.title}
                           </h3>
                         </div>
 
                         {/* Right Actions */}
-                        <div className="flex items-center gap-1.5 shrink-0 pt-1.5 md:pt-0 border-t md:border-t-0 border-slate-100 flex-wrap">
+                        <div className="tablet-actions flex items-center gap-1.5 shrink-0 pt-1.5 md:pt-0 border-t md:border-t-0 border-slate-100 flex-wrap">
                           {isAdmin ? (
                             /* ADMIN CONTROLS: View Submissions + Edit Assignment + Delete Assignment */
                             <div className="flex items-center gap-1.5 flex-wrap">
@@ -979,7 +1096,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                                 onClick={() => handleToggleMarkAllCompleted(assignment)}
                                 title={assignment.isMarkedCompleted ? 'ยกเลิกสถานะส่งครบทุกคน' : 'ทำเครื่องหมายว่าส่งครบทุกคนแล้ว (ส่งด้วยกระดาษ)'}
                                 aria-label={assignment.isMarkedCompleted ? 'ยกเลิกสถานะส่งครบทุกคน' : 'ทำเครื่องหมายว่าส่งครบทุกคนแล้ว'}
-                                className={`p-1.5 rounded-lg border transition-all cursor-pointer shadow-2xs ${
+                                className={`tablet-icon-btn p-1.5 rounded-lg border transition-all cursor-pointer shadow-2xs ${
                                   assignment.isMarkedCompleted
                                     ? 'bg-emerald-500 text-white border-emerald-600 hover:bg-emerald-600'
                                     : 'bg-slate-50 text-slate-400 border-slate-200 hover:text-emerald-600 hover:bg-emerald-50 hover:border-emerald-300'
@@ -991,7 +1108,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                               <button
                                 onClick={() => setMemberStatusModalAssignment(assignment)}
                                 title="ดูสถานะการส่งและตรวจงานของสมาชิก"
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg border border-purple-200 transition-all cursor-pointer shadow-2xs"
+                                className="tablet-btn inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg border border-purple-200 transition-all cursor-pointer shadow-2xs"
                               >
                                 <Users className="w-3.5 h-3.5" />
                                 <span>สถานะการส่ง ({assignmentSubs.length}/{totalApprovedMembersCount})</span>
@@ -1000,7 +1117,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                               <button
                                 onClick={() => handleOpenEditAssignment(assignment)}
                                 title="แก้ไขรายละเอียดงานและกำหนดส่ง"
-                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg border border-slate-200 transition-all cursor-pointer"
+                                className="tablet-btn inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg border border-slate-200 transition-all cursor-pointer"
                               >
                                 <Edit3 className="w-3.5 h-3.5 text-slate-600" />
                                 <span>แก้ไข</span>
@@ -1009,7 +1126,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                               <button
                                 onClick={() => handleDeleteAssignment(assignment)}
                                 title="ลบงานที่มอบหมายและไฟล์ที่เกี่ยวข้องทั้งหมด"
-                                className="p-1 text-rose-600 hover:bg-rose-50 rounded-lg border border-rose-200 transition-colors cursor-pointer"
+                                className="tablet-icon-btn p-1 text-rose-600 hover:bg-rose-50 rounded-lg border border-rose-200 transition-colors cursor-pointer"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -1022,7 +1139,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                                   <button
                                     onClick={() => setPeerSubmissionsModalAssignment(assignment)}
                                     title="ดูสถานะการส่งและไฟล์งาน"
-                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg border border-emerald-200 transition-colors cursor-pointer shadow-2xs"
+                                    className="tablet-btn inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg border border-emerald-200 transition-colors cursor-pointer shadow-2xs"
                                   >
                                     <Users className="w-3.5 h-3.5" />
                                     <span>สถานะการส่ง (ส่งแล้ว)</span>
@@ -1031,7 +1148,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                                   <button
                                     onClick={() => handleOpenEditSubmission(mySubmission)}
                                     title="แก้ไขงานที่ส่ง / เปลี่ยนไฟล์ / เพิ่มไฟล์"
-                                    className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg border border-purple-200 transition-colors cursor-pointer"
+                                    className="tablet-btn inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg border border-purple-200 transition-colors cursor-pointer"
                                   >
                                     <Edit3 className="w-3.5 h-3.5" />
                                     <span>แก้ไขงาน</span>
@@ -1040,7 +1157,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                                   <button
                                     onClick={() => handleDeleteMySubmission(mySubmission.id)}
                                     title="ลบงานของตนเอง"
-                                    className="p-1 text-rose-600 hover:bg-rose-50 rounded-lg border border-rose-200 transition-colors cursor-pointer"
+                                    className="tablet-icon-btn p-1 text-rose-600 hover:bg-rose-50 rounded-lg border border-rose-200 transition-colors cursor-pointer"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
                                   </button>
@@ -1051,7 +1168,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                                     <button
                                       onClick={() => setPeerSubmissionsModalAssignment(assignment)}
                                       title="ดูสถานะการส่งของสมาชิกคนอื่นๆ"
-                                      className="inline-flex items-center gap-1.5 px-2 py-1 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-purple-50 hover:text-purple-700 rounded-lg transition-colors cursor-pointer"
+                                      className="tablet-btn inline-flex items-center gap-1.5 px-2 py-1 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-purple-50 hover:text-purple-700 rounded-lg transition-colors cursor-pointer"
                                     >
                                       <Users className="w-3.5 h-3.5" />
                                       <span>สถานะการส่ง ({assignmentSubs.length})</span>
@@ -1062,7 +1179,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                                       setSelectedAssignmentForSubmit(assignment.id);
                                       setIsMemberSubmitModalOpen(true);
                                     }}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-all shadow-xs glow-purple-hover cursor-pointer"
+                                    className="tablet-btn inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-all shadow-xs glow-purple-hover cursor-pointer"
                                   >
                                     <UploadCloud className="w-3.5 h-3.5" />
                                     <span>คลิกเพื่อส่งงาน</span>
@@ -1076,7 +1193,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
 
                       {/* Member: Compact Submitted Indicator */}
                       {mySubmission && (
-                        <div className="pt-1.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                        <div className="tablet-footer pt-1.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
                           <span className="flex items-center gap-1.5 text-emerald-700 font-medium">
                             <Check className="w-3.5 h-3.5" />
                             <span>ส่งงานแล้ว {mySubmission.files?.length ? `(${mySubmission.files.length} ไฟล์)` : ''}</span>
@@ -1096,7 +1213,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
 
       {/* TAB 2: ANNOUNCEMENTS & ACTIVITIES MANAGEMENT */}
       {activeSubTab === 'announcements' && (
-        <div className="bg-white rounded-2xl border border-purple-100 shadow-xs overflow-hidden space-y-4 p-4 sm:p-5">
+        <div className="tablet-list-box bg-white rounded-2xl border border-purple-100 shadow-xs overflow-hidden space-y-4 p-4 sm:p-5">
           <div className="flex items-center justify-between pb-3 border-b border-slate-100">
             <div>
               <h3 className="text-sm font-bold text-slate-900">
@@ -1108,7 +1225,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
             </div>
           </div>
 
-          <div className="space-y-3">
+          <div className="tablet-items-list space-y-3">
             {announcements.length === 0 ? (
               <div className="p-8 text-center text-xs text-slate-400 bg-slate-50 rounded-xl">
                 ยังไม่มีประกาศข่าวสารหรือกิจกรรมในขณะนี้
@@ -1117,7 +1234,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
               announcements.map((ann) => (
                 <div
                   key={ann.id}
-                  className={`p-4 rounded-xl border transition-all flex flex-col md:flex-row md:items-center justify-between gap-3 ${
+                  className={`tablet-announcement-item p-4 rounded-xl border transition-all flex flex-col md:flex-row md:items-center justify-between gap-3 ${
                     ann.isUrgent
                       ? 'bg-rose-50/40 border-rose-200 border-l-4 border-l-rose-500'
                       : 'bg-amber-50/30 border-amber-200 border-l-4 border-l-amber-500'
@@ -1165,7 +1282,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                       <button
                         onClick={() => handleOpenEditAnnouncement(ann)}
                         title="แก้ไขประกาศและเปลี่ยนวันที่จัดกิจกรรม"
-                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-xl border border-purple-200 transition-colors cursor-pointer"
+                        className="tablet-btn inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-xl border border-purple-200 transition-colors cursor-pointer"
                       >
                         <Edit3 className="w-3.5 h-3.5" />
                         <span>แก้ไขประกาศ</span>
@@ -1174,7 +1291,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                       <button
                         onClick={() => handleDeleteAnnouncement(ann)}
                         title="ลบประกาศนี้"
-                        className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-xl border border-rose-200 transition-colors cursor-pointer"
+                        className="tablet-icon-btn p-1.5 text-rose-600 hover:bg-rose-50 rounded-xl border border-rose-200 transition-colors cursor-pointer"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>

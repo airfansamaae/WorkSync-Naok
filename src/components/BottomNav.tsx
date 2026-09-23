@@ -41,9 +41,9 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   return (
     <nav 
       id="mobile-bottom-navigation"
-      className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/98 backdrop-blur-md border-t border-purple-200/80 px-1 py-1 shadow-[0_-4px_24px_rgba(0,0,0,0.08)] transform translate-z-0"
+      className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/98 backdrop-blur-md border-t border-purple-200/80 px-2 py-1.5 shadow-[0_-4px_24px_rgba(0,0,0,0.08)] transform translate-z-0"
     >
-      <div className="grid grid-cols-4 gap-1 items-center max-w-md mx-auto">
+      <div className="grid grid-cols-4 gap-1 sm:gap-2 items-center max-w-md sm:max-w-xl md:max-w-2xl mx-auto">
         {items.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
@@ -59,7 +59,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                   handleSelectTab(item.id);
                 }
               }}
-              className={`flex flex-col items-center justify-center py-1.5 px-0.5 rounded-xl transition-all relative ${
+              className={`flex flex-col items-center justify-center py-1.5 px-0.5 sm:px-2 rounded-xl transition-all relative ${
                 isActive
                   ? 'text-purple-700 font-bold bg-purple-50/80'
                   : 'text-slate-500 hover:text-purple-600'
@@ -73,7 +73,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                   </span>
                 )}
               </div>
-              <span className={`text-[10px] mt-0.5 leading-none whitespace-nowrap ${isActive ? 'font-black text-purple-800' : 'font-medium'}`}>
+              <span className={`text-[10px] sm:text-xs mt-0.5 leading-none whitespace-nowrap ${isActive ? 'font-black text-purple-800' : 'font-medium'}`}>
                 {item.label}
               </span>
               {isActive && (

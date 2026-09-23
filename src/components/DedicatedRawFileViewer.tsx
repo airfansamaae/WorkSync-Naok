@@ -1000,23 +1000,29 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
         try {
           if (docxContainerRef.current) {
             docxContainerRef.current.innerHTML = '';
-            await renderAsync(docxArrayBuffer, docxContainerRef.current, undefined, {
+            const renderOptions = {
               className: 'docx',
               inWrapper: true,
               ignoreWidth: false,
               ignoreHeight: false,
-              ignoreFonts: false,
+              ignoreFonts: true, // Prevents freeze/hang on embedded font loading!
               breakPages: true,
-              renderHeaders: true,
-              renderFooters: true,
-              renderFootnotes: true,
-              renderEndnotes: true,
+              renderHeaders: false, // Strict: no headers in or out of paper
+              renderFooters: false, // Strict: no footers in or out of paper
+              renderFootnotes: false,
+              renderEndnotes: false,
+              renderComments: false,
+              renderChanges: false,
               useBase64URL: true,
               trimXmlDeclaration: true,
-              renderChanges: false,
-              renderComments: false,
+              ignoreLastRenderedPageBreak: false,
               renderAltChunks: true,
-            });
+            };
+
+            await Promise.race([
+              renderAsync(docxArrayBuffer.slice(0), docxContainerRef.current, undefined, renderOptions),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('docx-preview timeout')), 7000))
+            ]);
 
             if (!isMounted) return;
 
@@ -1131,7 +1137,7 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
         .a4-page-sheet {
           width: 210mm !important;
           min-height: 297mm !important;
-          margin: 0 auto 24px auto !important;
+          margin: 0 auto 28px auto !important;
           padding: 25.4mm 20mm 25.4mm 20mm !important;
           box-sizing: border-box !important;
           background: #ffffff !important;
@@ -1139,10 +1145,9 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
           font-family: 'TH Sarabun New', 'TH Sarabun PSK', 'Sarabun', Tahoma, sans-serif !important;
           font-size: 16pt !important;
           line-height: 1.6 !important;
-          box-shadow: 0 4px 15px rgba(0, 0, 0, 0.25), 0 1px 3px rgba(0, 0, 0, 0.15) !important;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.28), 0 1px 4px rgba(0, 0, 0, 0.16) !important;
           border-radius: 1px !important;
           position: relative !important;
-          overflow: visible !important;
         }
 
         /* docx-preview wrapper styling: enforces authentic A4 size (210 × 297 mm), centered alignment */
@@ -1156,58 +1161,52 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
           box-sizing: border-box !important;
         }
 
-        /* Clean preview viewport: hide any auto-generated wrapper headers, footers, and metadata */
+        /* Clean preview viewport: strictly hide all headers, footers, metadata inside or outside page */
         .docx-wrapper > header,
         .docx-wrapper > footer,
         .docx-metadata,
         .docx-wrapper .docx-info,
         .docx-wrapper > .docx-message,
-        .docx-wrapper > .docx-header {
+        .docx-wrapper > .docx-header,
+        .docx-wrapper > .docx-footer,
+        section.docx > header,
+        section.docx > footer,
+        section.docx .docx-header,
+        section.docx .docx-footer {
           display: none !important;
+          visibility: hidden !important;
+          height: 0 !important;
+          min-height: 0 !important;
+          max-height: 0 !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          overflow: hidden !important;
+          opacity: 0 !important;
+          pointer-events: none !important;
         }
 
+        /* Section styling for docx pages: authentic A4 paper sheet (210 × 297 mm) with distinct separation */
         .docx-wrapper > section.docx,
         .docx-render-stage section {
           width: 210mm !important;
           min-height: 297mm !important;
-          margin: 0 auto 24px auto !important;
+          margin: 0 auto 28px auto !important;
           background: #ffffff !important;
           color: #111827 !important;
-          box-shadow: 0 4px 15px rgba(0, 0, 0, 0.25), 0 1px 3px rgba(0, 0, 0, 0.15) !important;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.28), 0 1px 4px rgba(0, 0, 0, 0.16) !important;
           box-sizing: border-box !important;
           position: relative !important;
           border-radius: 1px !important;
-          overflow: visible !important;
+          font-family: 'TH Sarabun New', 'TH Sarabun PSK', 'Sarabun', 'Angsana New', 'Cordia New', Tahoma, sans-serif !important;
         }
-        @media screen and (max-width: 860px) {
-          .a4-page-sheet, 
-          .docx-wrapper > section.docx,
-          .docx-render-stage section {
-            width: 95vw !important;
-            min-height: calc(95vw * 297 / 210) !important;
-            padding: 12mm 10mm !important;
-          }
+
+        /* Word article styling: preserve authentic margins and fonts */
+        .docx-wrapper > section.docx article {
+          font-size: 16pt;
+          line-height: 1.5;
         }
-        .docx-wrapper > section.docx table,
-        .a4-page-sheet table {
-          max-width: 100% !important;
-          table-layout: auto !important;
-          margin-left: auto !important;
-          margin-right: auto !important;
-        }
-        .docx-wrapper > section.docx table td,
-        .docx-wrapper > section.docx table th,
-        .a4-page-sheet table td,
-        .a4-page-sheet table th {
-          word-break: break-word !important;
-          overflow-wrap: break-word !important;
-        }
-        .docx-wrapper > section.docx p,
-        .a4-page-sheet p {
-          max-width: 100% !important;
-          word-break: break-word !important;
-          overflow-wrap: break-word !important;
-        }
+
+        /* Safety for images to fit within A4 paper bounds */
         .docx-wrapper > section.docx img,
         .a4-page-sheet img {
           max-width: 100% !important;

@@ -43,6 +43,12 @@ function createA4PagesFromText(text: string, defaultTitle?: string): DocxParsedP
       return !trimmed.startsWith('Google Drive File ID:') &&
              !trimmed.startsWith('จัดเก็บในโฟลเดอร์หลัก ID:') &&
              !trimmed.startsWith('ขนาดไฟล์: ') &&
+             !trimmed.startsWith('ขนาดเอกสาร:') &&
+             !trimmed.startsWith('ชื่อไฟล์ต้นฉบับ:') &&
+             !trimmed.startsWith('สถานะ: ') &&
+             !trimmed.includes('โรงเรียนกระบี่วิทยานุสรณ์') &&
+             !trimmed.includes('สังกัดสำนักงานเขตพื้นที่') &&
+             !trimmed.includes('ท่านสามารถกดปุ่ม "ดาวน์โหลดไฟล์ต้นฉบับ"') &&
              !trimmed.includes('อัปโหลดเข้าสู่ Google Drive Folder ID:') &&
              !trimmed.includes('เอกสารนี้ได้รับการจัดเก็บอย่างปลอดภัย');
     })
@@ -946,7 +952,7 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
         }
       } catch (err: any) {
         console.error('[DedicatedRawFileViewer] Notice parsing raw file:', err);
-        const fallbackText = file?.previewContent || `เอกสาร: ${file?.name || 'เอกสารระบบงานวิชาการ'}\n\nโรงเรียนกระบี่วิทยานุสรณ์\nสังกัดสำนักงานเขตพื้นที่การศึกษามัธยมศึกษาตรัง กระบี่\n\nชื่อไฟล์ต้นฉบับ: ${file?.name || '-'}\nขนาดเอกสาร: ${Math.round((file?.size || 1024) / 1024)} KB\nสถานะ: เอกสารสมบูรณ์พร้อมดาวน์โหลด\n\nหมายเหตุ: ท่านสามารถกดปุ่ม "ดาวน์โหลดไฟล์ต้นฉบับ" ด้านบนเพื่อรับไฟล์ต้นฉบับได้ทันที`;
+        const fallbackText = file?.previewContent || (file?.name ? `เอกสาร: ${file.name}` : '');
         setParsedPages(createA4PagesFromText(fallbackText, file?.name));
         if (isDocx) {
           setDocxRenderMode('fallback');
@@ -978,45 +984,87 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
     ? (docxRenderMode === 'fallback' ? (parsedPages.length || 1) : docxPreviewPagesCount)
     : (parsedPages.length || (isPdf ? 1 : 1));
 
-  // Render Word document as authentic A4 sheets with distinct A4 page separator (SINGLE AUTHENTIC VIEW)
+  // Render Word document (.docx/.doc) with extreme precision: docx-preview primary, fallback parser secondary
   useEffect(() => {
     let isMounted = true;
     if (isDocx && docxArrayBuffer) {
       const docxKey = `${file?.id || ''}_${file?.name || ''}_${docxArrayBuffer.byteLength}`;
-      if (lastRenderedKeyRef.current === docxKey && docxRenderMode === 'fallback' && parsedPages.length > 0) {
+      if (lastRenderedKeyRef.current === docxKey && (docxRenderMode === 'docx-preview' || (docxRenderMode === 'fallback' && parsedPages.length > 0))) {
         setLoading(false);
         return;
       }
       lastRenderedKeyRef.current = docxKey;
       lastRenderedBufferRef.current = docxArrayBuffer;
 
-      // Always parse with parseDocxBinary to produce authentic A4 pages (210 × 297 mm) with distinct page dividers
-      parseDocxBinary(docxArrayBuffer).then((result) => {
-        if (!isMounted) return;
-        if (result && result.pages && result.pages.length > 0) {
-          setParsedPages(result.pages);
-          setDocxPreviewPagesCount(result.pages.length);
-          setDocxRenderMode('fallback');
-          setCurrentPageInView(1);
-          setLoading(false);
-        } else {
+      const renderDocx = async () => {
+        try {
+          if (docxContainerRef.current) {
+            docxContainerRef.current.innerHTML = '';
+            await renderAsync(docxArrayBuffer, docxContainerRef.current, undefined, {
+              className: 'docx',
+              inWrapper: true,
+              ignoreWidth: false,
+              ignoreHeight: false,
+              ignoreFonts: false,
+              breakPages: true,
+              renderHeaders: true,
+              renderFooters: true,
+              renderFootnotes: true,
+              renderEndnotes: true,
+              useBase64URL: true,
+              trimXmlDeclaration: true,
+              renderChanges: false,
+              renderComments: false,
+              renderAltChunks: true,
+            });
+
+            if (!isMounted) return;
+
+            const sections = docxContainerRef.current.querySelectorAll('section.docx');
+            if (sections && sections.length > 0) {
+              pageDomMap.current.clear();
+              sections.forEach((sec, idx) => {
+                registerPageRef(idx + 1, sec as HTMLDivElement);
+              });
+              setDocxPreviewPagesCount(sections.length);
+              setDocxRenderMode('docx-preview');
+              setCurrentPageInView(1);
+              setLoading(false);
+              return;
+            }
+          }
+          throw new Error('docx-preview did not produce any section.docx');
+        } catch (docxErr) {
+          if (!isMounted) return;
+          console.warn('[DedicatedRawFileViewer] docx-preview renderAsync failed, falling back to parseDocxBinary:', docxErr);
+          try {
+            const result = await parseDocxBinary(docxArrayBuffer);
+            if (!isMounted) return;
+            if (result && result.pages && result.pages.length > 0) {
+              pageDomMap.current.clear();
+              setParsedPages(result.pages);
+              setDocxPreviewPagesCount(result.pages.length);
+              setDocxRenderMode('fallback');
+              setCurrentPageInView(1);
+              setLoading(false);
+              return;
+            }
+          } catch (parseErr) {
+            console.warn('[DedicatedRawFileViewer] parseDocxBinary fallback failed:', parseErr);
+          }
+
+          if (!isMounted) return;
           const fallbackPages = createA4PagesFromText(file?.previewContent || file?.name || 'เอกสาร Word', file?.name);
+          pageDomMap.current.clear();
           setParsedPages(fallbackPages);
           setDocxPreviewPagesCount(fallbackPages.length);
           setDocxRenderMode('fallback');
           setCurrentPageInView(1);
           setLoading(false);
         }
-      }).catch((err) => {
-        if (!isMounted) return;
-        console.warn('[DedicatedRawFileViewer] parseDocxBinary failed, falling back to text A4:', err);
-        const fallbackPages = createA4PagesFromText(file?.previewContent || file?.name || 'เอกสาร Word', file?.name);
-        setParsedPages(fallbackPages);
-        setDocxPreviewPagesCount(fallbackPages.length);
-        setDocxRenderMode('fallback');
-        setCurrentPageInView(1);
-        setLoading(false);
-      });
+      };
+
+      renderDocx();
     }
     return () => {
       isMounted = false;
@@ -1079,12 +1127,11 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
         }
 
         /* Authentic A4 Dimensions: 210mm × 297mm (21 × 29.7 ซม.) */
-        /* Symmetrical balanced margins: pages are perfectly centered and fit screen seamlessly */
+        /* Exact page separation with margin-bottom and realistic page shadow */
         .a4-page-sheet {
-          width: min(100%, 210mm) !important;
-          max-width: 100% !important;
+          width: 210mm !important;
           min-height: 297mm !important;
-          margin: 16px auto 28px auto !important;
+          margin: 0 auto 24px auto !important;
           padding: 25.4mm 20mm 25.4mm 20mm !important;
           box-sizing: border-box !important;
           background: #ffffff !important;
@@ -1092,8 +1139,8 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
           font-family: 'TH Sarabun New', 'TH Sarabun PSK', 'Sarabun', Tahoma, sans-serif !important;
           font-size: 16pt !important;
           line-height: 1.6 !important;
-          box-shadow: 0 10px 30px -4px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
-          border-radius: 2px !important;
+          box-shadow: 0 4px 15px rgba(0, 0, 0, 0.25), 0 1px 3px rgba(0, 0, 0, 0.15) !important;
+          border-radius: 1px !important;
           position: relative !important;
           overflow: visible !important;
         }
@@ -1101,24 +1148,35 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
         /* docx-preview wrapper styling: enforces authentic A4 size (210 × 297 mm), centered alignment */
         .docx-wrapper {
           background: transparent !important;
-          padding: 16px 8px !important;
+          padding: 24px 0 !important;
           display: flex !important;
           flex-direction: column !important;
           align-items: center !important;
           width: 100% !important;
+          box-sizing: border-box !important;
         }
+
+        /* Clean preview viewport: hide any auto-generated wrapper headers, footers, and metadata */
+        .docx-wrapper > header,
+        .docx-wrapper > footer,
+        .docx-metadata,
+        .docx-wrapper .docx-info,
+        .docx-wrapper > .docx-message,
+        .docx-wrapper > .docx-header {
+          display: none !important;
+        }
+
         .docx-wrapper > section.docx,
         .docx-render-stage section {
-          width: min(100%, 210mm) !important;
-          max-width: 100% !important;
+          width: 210mm !important;
           min-height: 297mm !important;
-          margin: 16px auto 28px auto !important;
+          margin: 0 auto 24px auto !important;
           background: #ffffff !important;
           color: #111827 !important;
-          box-shadow: 0 10px 30px -4px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
+          box-shadow: 0 4px 15px rgba(0, 0, 0, 0.25), 0 1px 3px rgba(0, 0, 0, 0.15) !important;
           box-sizing: border-box !important;
           position: relative !important;
-          border-radius: 2px !important;
+          border-radius: 1px !important;
           overflow: visible !important;
         }
         @media screen and (max-width: 860px) {
@@ -1407,134 +1465,103 @@ export const DedicatedRawFileViewer: React.FC<DedicatedRawFileViewerProps> = ({
                     {parsedPages.map((page, pageIdx) => {
                       const pageNum = page.pageNumber || pageIdx + 1;
                       return (
-                        <div key={pageNum} className="flex flex-col items-center w-full">
-                          <div 
-                            ref={(el) => registerPageRef(pageNum, el)}
-                            data-page-index={pageNum}
-                            className="a4-page-sheet flex flex-col justify-start select-text relative mb-2"
-                          >
-                            {/* Official A4 Page Header with Page Number */}
-                            <div className="w-full flex justify-between items-center text-xs text-slate-500 font-sarabun border-b border-slate-200 pb-2.5 mb-4 select-none">
-                              <span className="truncate max-w-[70%] font-medium text-slate-600">
-                                {file?.name || 'เอกสารทางวิชาการ'}
-                              </span>
-                              <span className="px-3 py-1 bg-slate-100 rounded-full text-slate-700 font-semibold border border-slate-200">
-                                หน้า {pageNum} / {parsedPages.length} (ขนาด A4: 210 × 297 มม.)
-                              </span>
-                            </div>
+                        <div 
+                          key={pageNum}
+                          ref={(el) => registerPageRef(pageNum, el)}
+                          data-page-index={pageNum}
+                          className="a4-page-sheet flex flex-col justify-start select-text relative"
+                        >
+                          <div className="flex-1 space-y-3.5 text-slate-900 leading-relaxed font-sarabun">
+                            {page.elements.map((el, elIdx) => {
+                              if (el.type === 'paragraph') {
+                                const isCenter = el.align === 'center';
+                                const isRight = el.align === 'right';
+                                const isIndented = el.isIndented || false;
+                                const alignClass = isCenter ? 'text-center' : isRight ? 'text-right' : 'text-left';
+                                const indentClass = !isCenter && !isRight && isIndented ? 'indent-10' : '';
 
-                            <div className="flex-1 space-y-3.5 text-slate-900 leading-relaxed font-sarabun">
-                              {page.elements.map((el, elIdx) => {
-                                if (el.type === 'paragraph') {
-                                  const isCenter = el.align === 'center';
-                                  const isRight = el.align === 'right';
-                                  const isIndented = el.isIndented || false;
-                                  const alignClass = isCenter ? 'text-center' : isRight ? 'text-right' : 'text-left';
-                                  const indentClass = !isCenter && !isRight && isIndented ? 'indent-10' : '';
-
-                                  return (
-                                    <p 
-                                      key={elIdx} 
-                                      className={`${alignClass} ${indentClass} leading-relaxed my-1.5`}
-                                      style={{ fontSize: '16pt' }}
-                                    >
-                                      {el.runs.map((run, rIdx) => (
-                                        <span 
-                                          key={rIdx} 
-                                          style={{
-                                            fontWeight: run.bold ? 'bold' : undefined,
-                                            fontStyle: run.italic ? 'italic' : undefined,
-                                            textDecoration: run.underline ? 'underline' : undefined,
-                                            color: run.color || undefined,
-                                            fontSize: run.fontSizePt ? `${run.fontSizePt}pt` : undefined
-                                          }}
-                                        >
-                                          {run.text}
-                                        </span>
-                                      ))}
-                                    </p>
-                                  );
-                                }
-
-                                if (el.type === 'table') {
-                                  const tableRows = el.tableRows || (el.rows ? el.rows.map((row, rIdx) => ({
-                                    isHeader: rIdx === 0,
-                                    cells: row.map((c: any, cIdx: number) => {
-                                      const text = typeof c === 'string' ? c : c?.text || '';
-                                      return {
-                                        text,
-                                        align: rIdx === 0 ? 'center' : 'left',
-                                        bgColor: rIdx === 0 ? '#F1F5F9' : undefined,
-                                        bold: rIdx === 0 || (cIdx === 0 && rIdx > 0),
-                                        fontSizePt: rIdx === 0 ? 14 : 13,
-                                        runs: [{ text, bold: rIdx === 0 || (cIdx === 0 && rIdx > 0) }]
-                                      };
-                                    })
-                                  })) : []);
-
-                                  const outerBorder = el.borderColors?.outer || '#475569';
-                                  const innerBorder = el.borderColors?.inner || '#94A3B8';
-
-                                  return (
-                                    <div key={elIdx} className="my-4 overflow-x-auto w-full">
-                                      <table 
-                                        className="w-full border-collapse font-sarabun text-[14pt] leading-normal my-2 table-auto"
-                                        style={{ border: `1.5px solid ${outerBorder}` }}
+                                return (
+                                  <p 
+                                    key={elIdx} 
+                                    className={`${alignClass} ${indentClass} leading-relaxed my-1.5`}
+                                    style={{ fontSize: '16pt' }}
+                                  >
+                                    {el.runs.map((run, rIdx) => (
+                                      <span 
+                                        key={rIdx} 
+                                        style={{
+                                          fontWeight: run.bold ? 'bold' : undefined,
+                                          fontStyle: run.italic ? 'italic' : undefined,
+                                          textDecoration: run.underline ? 'underline' : undefined,
+                                          color: run.color || undefined,
+                                          fontSize: run.fontSizePt ? `${run.fontSizePt}pt` : undefined
+                                        }}
                                       >
-                                        <tbody>
-                                          {tableRows.map((row, rIdx) => {
-                                            const isHeader = row.isHeader || rIdx === 0;
-                                            return (
-                                              <tr key={rIdx} className={isHeader ? 'font-bold' : ''}>
-                                                {row.cells.map((cell, cIdx) => (
-                                                  <td 
-                                                    key={cIdx} 
-                                                    colSpan={cell.colSpan}
-                                                    rowSpan={cell.rowSpan}
-                                                    className={`p-2.5 text-slate-900 align-top ${cell.align === 'center' ? 'text-center' : 'text-left'}`}
-                                                    style={{
-                                                      backgroundColor: cell.bgColor || (isHeader ? '#F1F5F9' : undefined),
-                                                      border: `1px solid ${innerBorder}`,
-                                                      fontSize: cell.fontSizePt ? `${cell.fontSizePt}pt` : isHeader ? '14pt' : '13pt',
-                                                      fontWeight: cell.bold || isHeader ? 700 : 400
-                                                    }}
-                                                  >
-                                                    {cell.text}
-                                                  </td>
-                                                ))}
-                                              </tr>
-                                            );
-                                          })}
-                                        </tbody>
-                                      </table>
-                                    </div>
-                                  );
-                                }
+                                        {run.text}
+                                      </span>
+                                    ))}
+                                  </p>
+                                );
+                              }
 
-                                return null;
-                              })}
-                            </div>
+                              if (el.type === 'table') {
+                                const tableRows = el.tableRows || (el.rows ? el.rows.map((row, rIdx) => ({
+                                  isHeader: rIdx === 0,
+                                  cells: row.map((c: any, cIdx: number) => {
+                                    const text = typeof c === 'string' ? c : c?.text || '';
+                                    return {
+                                      text,
+                                      align: rIdx === 0 ? 'center' : 'left',
+                                      bgColor: rIdx === 0 ? '#F1F5F9' : undefined,
+                                      bold: rIdx === 0 || (cIdx === 0 && rIdx > 0),
+                                      fontSizePt: rIdx === 0 ? 14 : 13,
+                                      runs: [{ text, bold: rIdx === 0 || (cIdx === 0 && rIdx > 0) }]
+                                    };
+                                  })
+                                })) : []);
 
-                            {/* Official A4 Page Footer */}
-                            <div className="w-full flex justify-between items-center text-[11pt] text-slate-500 font-sarabun border-t border-slate-200 pt-2.5 mt-4 select-none">
-                              <span>ขนาดกระดาษมาตรฐาน A4 (210 × 297 มิลลิเมตร)</span>
-                              <span>โรงเรียนกระบี่วิทยานุสรณ์</span>
-                            </div>
+                                const outerBorder = el.borderColors?.outer || '#475569';
+                                const innerBorder = el.borderColors?.inner || '#94A3B8';
+
+                                return (
+                                  <div key={elIdx} className="my-4 overflow-x-auto w-full">
+                                    <table 
+                                      className="w-full border-collapse font-sarabun text-[14pt] leading-normal my-2 table-auto"
+                                      style={{ border: `1.5px solid ${outerBorder}` }}
+                                    >
+                                      <tbody>
+                                        {tableRows.map((row, rIdx) => {
+                                          const isHeader = row.isHeader || rIdx === 0;
+                                          return (
+                                            <tr key={rIdx} className={isHeader ? 'font-bold' : ''}>
+                                              {row.cells.map((cell, cIdx) => (
+                                                <td 
+                                                  key={cIdx} 
+                                                  colSpan={cell.colSpan}
+                                                  rowSpan={cell.rowSpan}
+                                                  className={`p-2.5 text-slate-900 align-top ${cell.align === 'center' ? 'text-center' : 'text-left'}`}
+                                                  style={{
+                                                    backgroundColor: cell.bgColor || (isHeader ? '#F1F5F9' : undefined),
+                                                    border: `1px solid ${innerBorder}`,
+                                                    fontSize: cell.fontSizePt ? `${cell.fontSizePt}pt` : isHeader ? '14pt' : '13pt',
+                                                    fontWeight: cell.bold || isHeader ? 700 : 400
+                                                  }}
+                                                >
+                                                  {cell.text}
+                                                </td>
+                                              ))}
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                );
+                              }
+
+                              return null;
+                            })}
                           </div>
-
-                          {/* Clear and distinct A4 Page Break Separator between pages (ขนาด 210 × 297 มม.) */}
-                          {pageIdx < parsedPages.length - 1 && (
-                            <div className="w-full max-w-[210mm] flex items-center justify-center gap-3 my-6 text-slate-400 select-none">
-                              <div className="flex-1 h-px bg-slate-700/80" />
-                              <div className="flex items-center gap-2.5 px-5 py-2 bg-slate-900 border border-slate-700/80 rounded-full shadow-lg">
-                                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
-                                <span className="text-xs font-semibold text-slate-200 font-sans tracking-wide">
-                                  ที่คั่นหน้ากระดาษ ขนาด A4 (210 × 297 มิลลิเมตร) • สิ้นสุดหน้าที่ {pageNum} / เริ่มหน้าที่ {pageNum + 1}
-                                </span>
-                              </div>
-                              <div className="flex-1 h-px bg-slate-700/80" />
-                            </div>
-                          )}
                         </div>
                       );
                     })}

@@ -503,6 +503,7 @@ export class StorageService {
   private isSyncing: boolean = false;
   private hasPendingSync: boolean = false;
   private lastRemoteVersion: number = 0;
+  private activeSessionUser: User | null = null;
   private inMemoryWebsites: RecommendedWebsite[] | null = null;
   private clientId: string = 'client_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
   private syncInfo: SyncStatusInfo = {
@@ -570,9 +571,8 @@ export class StorageService {
         localStorage.setItem(STORAGE_KEYS.SCHOOL, JSON.stringify(INITIAL_SCHOOL_PROFILE));
       }
     }
-    // Strict Login Security: Always require explicit Login. Purge all stored sessions on fresh load
+    // Clean legacy local storage artifacts if any (preserving active sessionStorage)
     try {
-      sessionStorage.removeItem('academic_auth_session');
       localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
       localStorage.removeItem('academic_current_user');
       localStorage.removeItem('academic_current_user_v1');
@@ -875,17 +875,23 @@ export class StorageService {
     });
   }
 
-  // --- Current Auth Session (Strictly Session-Based to Prevent Auto-Login) ---
+  // --- Current Auth Session (Session-Based with in-memory caching to guarantee zero sudden logouts) ---
   public getCurrentUser(): User | null {
+    if (this.activeSessionUser) return this.activeSessionUser;
     try {
       const data = sessionStorage.getItem('academic_auth_session');
-      return data ? JSON.parse(data) : null;
+      if (data) {
+        this.activeSessionUser = JSON.parse(data);
+        return this.activeSessionUser;
+      }
+      return null;
     } catch {
       return null;
     }
   }
 
   public setCurrentUser(user: User | null) {
+    this.activeSessionUser = user;
     try {
       if (user) {
         sessionStorage.setItem('academic_auth_session', JSON.stringify(user));
@@ -901,6 +907,7 @@ export class StorageService {
   }
 
   public logout(): void {
+    this.activeSessionUser = null;
     this.setCurrentUser(null);
   }
 
@@ -1091,6 +1098,10 @@ export class StorageService {
   }
 
   public deleteUser(userId: string): boolean {
+    const current = this.getCurrentUser();
+    if (current && (current.id === userId || userId === 'user_admin')) {
+      throw new Error('ไม่สามารถลบบัญชีผู้ดูแลระบบหรือบัญชีที่กำลังเข้าสู่ระบบอยู่ได้');
+    }
     const users = this.getUsers().filter(u => u.id !== userId);
     safeSetLocalStorage(STORAGE_KEYS.USERS, users);
     this.notify();

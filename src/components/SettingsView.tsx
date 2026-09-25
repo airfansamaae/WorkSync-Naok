@@ -238,6 +238,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   const handleDeleteMember = (userId: string, userName: string) => {
+    if (currentUser?.id === userId || userName.toLowerCase() === 'admin' || userId === 'user_admin') {
+      Swal.fire({
+        icon: 'warning',
+        title: 'ไม่สามารถลบได้',
+        text: 'ไม่สามารถลบบัญชีผู้ดูแลระบบหลัก หรือบัญชีที่คุณกำลังใช้งานอยู่ได้',
+        confirmButtonColor: '#7C3AED',
+      });
+      return;
+    }
+
     Swal.fire({
       title: 'ยืนยันการลบสมาชิก?',
       html: `คุณต้องการลบสมาชิก <b>"${userName}"</b> ออกจากระบบใช่หรือไม่?`,
@@ -249,14 +259,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       cancelButtonText: 'ยกเลิก',
     }).then((result) => {
       if (result.isConfirmed) {
-        storage.deleteUser(userId);
-        Swal.fire({
-          icon: 'success',
-          title: 'ลบสมาชิกเรียบร้อย',
-          timer: 1400,
-          showConfirmButton: false,
-        });
-        onRefreshData();
+        try {
+          storage.deleteUser(userId);
+          Swal.fire({
+            icon: 'success',
+            title: 'ลบสมาชิกเรียบร้อย',
+            timer: 1400,
+            showConfirmButton: false,
+          });
+          onRefreshData();
+        } catch (err: any) {
+          Swal.fire('ข้อผิดพลาด', err.message || 'ไม่สามารถลบสมาชิกได้', 'error');
+        }
       }
     });
   };
@@ -752,13 +766,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     >
                       <Key className="w-4 h-4 text-purple-600" />
                     </button>
-                    <button
-                      onClick={() => handleDeleteMember(member.id, member.fullName)}
-                      title="ลบสมาชิก"
-                      className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg border border-slate-200 transition-colors cursor-pointer"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {member.id !== currentUser?.id && member.username.toLowerCase() !== 'admin' && member.id !== 'user_admin' && (
+                      <button
+                        onClick={() => handleDeleteMember(member.id, member.fullName)}
+                        title="ลบสมาชิก"
+                        className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg border border-slate-200 transition-colors cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}

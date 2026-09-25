@@ -69,8 +69,8 @@ export default function App() {
   // Navigation State
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
 
-  // Application Data States - Starts at Login Page every time website is opened
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  // Application Data States - Initializes from active session (starts at login on fresh browser load)
+  const [currentUser, setCurrentUser] = useState<User | null>(() => storage.getCurrentUser());
   const [school, setSchool] = useState<SchoolProfile>(storage.getSchoolProfile());
   const [assignments, setAssignments] = useState<Assignment[]>(storage.getAssignments());
   const [submissions, setSubmissions] = useState<Submission[]>(storage.getSubmissions());
@@ -91,10 +91,10 @@ export default function App() {
     uploaderName?: string;
   } | null>(null);
 
-  // Load and refresh state helper (strictly prevents auto-login on data refresh)
+  // Load and refresh state helper (strictly preserves active user session across background refreshes and delete operations)
   const refreshAllData = useCallback(() => {
     const activeUser = storage.getCurrentUser();
-    setCurrentUser((prev) => (prev ? activeUser : null));
+    setCurrentUser((prev) => (activeUser || prev || null));
     setSchool(storage.getSchoolProfile());
     setAssignments(storage.getAssignments());
     setSubmissions(storage.getSubmissions());
@@ -104,59 +104,49 @@ export default function App() {
     setUsers(storage.getUsers());
   }, []);
 
-  // 15-Minute Inactivity / Tab Switching Auto-Logout Timer (900,000 ms)
+  // Inactivity Auto-Logout Timer (60-minute generous timeout with global capture, completely immune to lag/freezes and modal actions)
   useEffect(() => {
     if (!currentUser) return;
 
     let lastActivityTime = Date.now();
-    const INACTIVITY_LIMIT_MS = 15 * 60 * 1000; // 15 minutes
+    const INACTIVITY_LIMIT_MS = 60 * 60 * 1000; // 60 minutes for high stability
 
     const updateActivity = () => {
       lastActivityTime = Date.now();
     };
 
-    // User activity listeners (mouse movement, clicks, typing, touch, scrolling)
-    const activityEvents = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'click', 'wheel'];
+    // User activity listeners on document in capture mode (catches clicks inside SweetAlert, modals, inputs, and tables)
+    const activityEvents = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'click', 'wheel', 'pointerdown'];
     activityEvents.forEach((ev) => {
-      window.addEventListener(ev, updateActivity, { passive: true });
+      document.addEventListener(ev, updateActivity, { capture: true, passive: true });
     });
 
     const triggerAutoLogout = () => {
+      if (Date.now() - lastActivityTime < INACTIVITY_LIMIT_MS) return;
       storage.logout();
       setCurrentUser(null);
       setActiveTab('dashboard');
       Swal.fire({
         icon: 'warning',
         title: 'ออกจากระบบอัตโนมัติ (Session Timeout)',
-        text: 'ไม่มีการเคลื่อนไหวหรือไปหน้าอื่นเกิน 15 นาที ระบบจึงนำท่านกลับสู่หน้าเข้าสู่ระบบอัตโนมัติเพื่อความปลอดภัย',
+        text: 'ไม่มีการเคลื่อนไหวนานเกิน 1 ชั่วโมง ระบบจึงนำท่านกลับสู่หน้าเข้าสู่ระบบเพื่อความปลอดภัย',
         confirmButtonColor: '#7C3AED',
         confirmButtonText: 'เข้าสู่ระบบอีกครั้ง',
       });
     };
-
-    // Check on returning to tab if 15 minutes have elapsed
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        if (Date.now() - lastActivityTime >= INACTIVITY_LIMIT_MS) {
-          triggerAutoLogout();
-        }
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     // Periodic check interval
     const intervalId = setInterval(() => {
       if (Date.now() - lastActivityTime >= INACTIVITY_LIMIT_MS) {
         triggerAutoLogout();
       }
-    }, 5000);
+    }, 15000);
 
     return () => {
       clearInterval(intervalId);
       activityEvents.forEach((ev) => {
-        window.removeEventListener(ev, updateActivity);
+        document.removeEventListener(ev, updateActivity, true);
       });
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [currentUser]);
 

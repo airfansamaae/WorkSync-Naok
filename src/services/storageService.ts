@@ -1396,6 +1396,7 @@ export class StorageService {
     docNumber?: string;
     issueDate?: string;
     file: UploadedFile;
+    isPinned?: boolean;
   }): DocumentItem {
     const docs = this.getDocuments();
     const currentUser = this.getCurrentUser();
@@ -1411,6 +1412,8 @@ export class StorageService {
       uploaderId: currentUser?.id || 'admin',
       uploaderName: currentUser?.fullName || 'ฝ่ายวิชาการ',
       downloadCount: 0,
+      isPinned: !!data.isPinned,
+      pinnedAt: data.isPinned ? new Date().toISOString() : undefined,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -1420,6 +1423,30 @@ export class StorageService {
     this.broadcastChange('documents', 'insert', newDoc);
     this.notify();
     return newDoc;
+  }
+
+  public toggleDocumentPin(id: string): boolean {
+    let isNowPinned = false;
+    let targetDoc: DocumentItem | null = null;
+    const docs = this.getDocuments().map(d => {
+      if (d.id === id) {
+        isNowPinned = !d.isPinned;
+        targetDoc = {
+          ...d,
+          isPinned: isNowPinned,
+          pinnedAt: isNowPinned ? new Date().toISOString() : undefined,
+          updatedAt: new Date().toISOString(),
+        };
+        return targetDoc;
+      }
+      return d;
+    });
+    safeSetLocalStorage(STORAGE_KEYS.DOCUMENTS, docs);
+    if (targetDoc) {
+      this.broadcastChange('documents', 'update', targetDoc);
+    }
+    this.notify();
+    return isNowPinned;
   }
 
   public updateDocument(id: string, updates: Partial<DocumentItem>) {

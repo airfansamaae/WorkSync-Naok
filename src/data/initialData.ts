@@ -298,6 +298,8 @@ export const INITIAL_DOCUMENTS: DocumentItem[] = [
     description: 'เทมเพลตมาตรฐานสำหรับการเขียนแผนการสอนบูรณาการ สอดคล้องกับเกณฑ์ วPA และมาตรฐานหลักสูตรแกนกลาง',
     issueDate: '2026-08-15',
     downloadCount: 84,
+    isPinned: true,
+    pinnedAt: '2026-08-15T09:00:00Z',
     uploaderId: 'user_admin',
     uploaderName: 'Admin ผู้ดูแลระบบ',
     file: {

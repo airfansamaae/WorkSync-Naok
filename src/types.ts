@@ -83,6 +83,8 @@ export interface DocumentItem {
   uploaderId: string;
   uploaderName: string;
   downloadCount: number;
+  isPinned?: boolean;
+  pinnedAt?: string;
   createdAt: string;
   updatedAt: string;
 }

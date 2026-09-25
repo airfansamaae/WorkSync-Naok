@@ -16,7 +16,8 @@ import {
   X,
   Calendar,
   Layers,
-  ArrowDownToLine
+  ArrowDownToLine,
+  Pin
 } from 'lucide-react';
 import { 
   DocumentItem, 
@@ -53,6 +54,7 @@ export const DocumentCenterView: React.FC<DocumentCenterViewProps> = ({
   const [docNumber, setDocNumber] = useState('');
   const [docDescription, setDocDescription] = useState('');
   const [selectedDocFile, setSelectedDocFile] = useState<File | null>(null);
+  const [docIsPinned, setDocIsPinned] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
   // Edit document state
@@ -156,6 +158,7 @@ export const DocumentCenterView: React.FC<DocumentCenterViewProps> = ({
       docNumber: docNumber,
       description: docDescription,
       file: uploaded,
+      isPinned: docIsPinned,
     });
 
     setUploadProgress(100);
@@ -167,6 +170,7 @@ export const DocumentCenterView: React.FC<DocumentCenterViewProps> = ({
       setDocNumber('');
       setDocDescription('');
       setSelectedDocFile(null);
+      setDocIsPinned(false);
 
       Swal.fire({
         icon: 'success',
@@ -192,6 +196,22 @@ export const DocumentCenterView: React.FC<DocumentCenterViewProps> = ({
     });
 
     triggerDirectDownload(doc.file);
+  };
+
+  // Handle Toggle Pin Document (Admin only)
+  const handleTogglePin = (doc: DocumentItem) => {
+    const isNowPinned = storage.toggleDocumentPin(doc.id);
+    Swal.fire({
+      icon: 'success',
+      title: isNowPinned ? 'ปักหมุดเอกสารสำเร็จ' : 'ยกเลิกการปักหมุดแล้ว',
+      text: isNowPinned
+        ? `เอกสาร "${doc.title}" จะแสดงอยู่ด้านบนสุดของศูนย์เอกสาร`
+        : `ยกเลิกการปักหมุดเอกสาร "${doc.title}" เรียบร้อยแล้ว`,
+      toast: true,
+      position: 'top-end',
+      timer: 1800,
+      showConfirmButton: false,
+    });
   };
 
   // Handle Delete Document
@@ -232,6 +252,8 @@ export const DocumentCenterView: React.FC<DocumentCenterViewProps> = ({
       docNumber: editingDoc.docNumber,
       category: editingDoc.category,
       description: editingDoc.description,
+      isPinned: !!editingDoc.isPinned,
+      pinnedAt: editingDoc.isPinned ? (editingDoc.pinnedAt || new Date().toISOString()) : undefined,
     });
     setEditingDoc(null);
     Swal.fire({
@@ -242,7 +264,7 @@ export const DocumentCenterView: React.FC<DocumentCenterViewProps> = ({
     });
   };
 
-  // Filtering
+  // Filtering & Sorting (Pinned documents displayed at the top)
   const filteredDocs = documents.filter((doc) => {
     if (selectedCategory !== 'all' && doc.category !== selectedCategory) {
       return false;
@@ -256,6 +278,14 @@ export const DocumentCenterView: React.FC<DocumentCenterViewProps> = ({
       return matchTitle || matchNum || matchDesc || matchFileName;
     }
     return true;
+  });
+
+  const sortedDocs = [...filteredDocs].sort((a, b) => {
+    if (a.isPinned && !b.isPinned) return -1;
+    if (!a.isPinned && b.isPinned) return 1;
+    const dateA = a.pinnedAt || a.issueDate || a.createdAt;
+    const dateB = b.pinnedAt || b.issueDate || b.createdAt;
+    return new Date(dateB).getTime() - new Date(dateA).getTime();
   });
 
   return (
@@ -350,15 +380,19 @@ export const DocumentCenterView: React.FC<DocumentCenterViewProps> = ({
 
       {/* Document Minimal List View with Spacing between files */}
       <div className="space-y-2.5 sm:space-y-3">
-        {filteredDocs.length === 0 ? (
+        {sortedDocs.length === 0 ? (
           <div className="bg-white rounded-2xl border border-purple-100 p-8 text-center text-xs text-slate-400 shadow-2xs">
             ไม่พบเอกสารตามเงื่อนไขที่ค้นหา
           </div>
         ) : (
-          filteredDocs.map((doc) => (
+          sortedDocs.map((doc) => (
             <div
               key={doc.id}
-              className="bg-white rounded-xl sm:rounded-2xl border border-purple-100/80 shadow-2xs hover:shadow-xs hover:border-purple-300/80 p-3 sm:py-3 sm:px-4.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all group"
+              className={`bg-white rounded-xl sm:rounded-2xl border p-3 sm:py-3 sm:px-4.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all group ${
+                doc.isPinned
+                  ? 'border-amber-300/90 bg-amber-50/20 shadow-xs'
+                  : 'border-purple-100/80 shadow-2xs hover:shadow-xs hover:border-purple-300/80'
+              }`}
             >
               {/* Left File Information (Compact & Orderly) */}
               <div className="flex items-start sm:items-center space-x-3 min-w-0 flex-1">
@@ -378,6 +412,13 @@ export const DocumentCenterView: React.FC<DocumentCenterViewProps> = ({
 
                 <div className="min-w-0 flex-1 space-y-0.5">
                   <div className="flex items-center gap-2 flex-wrap">
+                    {doc.isPinned && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs">
+                        <Pin className="w-2.5 h-2.5 fill-amber-700 text-amber-700" />
+                        <span>ปักหมุด</span>
+                      </span>
+                    )}
+
                     <span
                       className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
                         doc.category === 'order'
@@ -409,7 +450,7 @@ export const DocumentCenterView: React.FC<DocumentCenterViewProps> = ({
                 </div>
               </div>
 
-              {/* Right Action Icons (Preview, Download, Admin Edit/Delete) */}
+              {/* Right Action Icons (Preview, Download, Admin Pin/Edit/Delete) */}
               <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center pt-1 sm:pt-0 border-t sm:border-t-0 border-slate-100 w-full sm:w-auto justify-end">
                 {/* Preview Icon (Opens authentic original file in new window) */}
                 <button
@@ -429,9 +470,21 @@ export const DocumentCenterView: React.FC<DocumentCenterViewProps> = ({
                   <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </button>
 
-                {/* Admin Extra: Edit & Delete */}
+                {/* Admin Extra: Pin, Edit & Delete */}
                 {isAdmin && (
                   <>
+                    <button
+                      onClick={() => handleTogglePin(doc)}
+                      title={doc.isPinned ? "ยกเลิกการปักหมุดเอกสารนี้" : "ปักหมุดเอกสารนี้ (แสดงด้านบนสุด)"}
+                      className={`p-1.5 sm:p-2 rounded-lg transition-all border cursor-pointer ${
+                        doc.isPinned
+                          ? 'bg-amber-500 text-white border-amber-600 hover:bg-amber-600 shadow-2xs'
+                          : 'text-slate-400 hover:text-amber-600 hover:bg-amber-50 border-slate-200'
+                      }`}
+                    >
+                      <Pin className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${doc.isPinned ? 'fill-white' : ''}`} />
+                    </button>
+
                     <button
                       onClick={() => setEditingDoc(doc)}
                       title="แก้ไขข้อมูลเอกสาร"
@@ -599,6 +652,21 @@ export const DocumentCenterView: React.FC<DocumentCenterViewProps> = ({
                 )}
               </div>
 
+              {/* Pin toggle for new document */}
+              <div className="flex items-center gap-2 p-2.5 rounded-xl bg-amber-50/70 border border-amber-200">
+                <input
+                  type="checkbox"
+                  id="doc-pin-toggle"
+                  checked={docIsPinned}
+                  onChange={(e) => setDocIsPinned(e.target.checked)}
+                  className="w-4 h-4 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer"
+                />
+                <label htmlFor="doc-pin-toggle" className="text-xs font-semibold text-slate-700 cursor-pointer flex items-center gap-1.5">
+                  <Pin className="w-3.5 h-3.5 text-amber-600 fill-amber-600" />
+                  <span>ปักหมุดเอกสารนี้ทันที (แสดงอยู่ด้านบนสุดของศูนย์เอกสาร)</span>
+                </label>
+              </div>
+
               {/* Progress Bar */}
               {uploadProgress !== null && (
                 <div className="space-y-2 p-3 bg-purple-50 rounded-xl border border-purple-200">
@@ -698,6 +766,21 @@ export const DocumentCenterView: React.FC<DocumentCenterViewProps> = ({
                   onChange={(e) => setEditingDoc({ ...editingDoc, description: e.target.value })}
                   className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-purple-500"
                 />
+              </div>
+
+              {/* Pin toggle in Edit modal */}
+              <div className="flex items-center gap-2 p-2.5 rounded-xl bg-amber-50/70 border border-amber-200">
+                <input
+                  type="checkbox"
+                  id="edit-doc-pin-toggle"
+                  checked={!!editingDoc.isPinned}
+                  onChange={(e) => setEditingDoc({ ...editingDoc, isPinned: e.target.checked })}
+                  className="w-4 h-4 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer"
+                />
+                <label htmlFor="edit-doc-pin-toggle" className="text-xs font-semibold text-slate-700 cursor-pointer flex items-center gap-1.5">
+                  <Pin className="w-3.5 h-3.5 text-amber-600 fill-amber-600" />
+                  <span>ปักหมุดเอกสารนี้ (แสดงอยู่ด้านบนสุดของศูนย์เอกสาร)</span>
+                </label>
               </div>
 
               <div className="flex justify-end gap-2 pt-2">

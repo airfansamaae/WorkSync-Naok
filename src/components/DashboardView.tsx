@@ -1222,10 +1222,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                                     ? 'ส่งครบทุกคนแล้ว (กระดาษ/เสร็จสิ้น) ✓'
                                     : 'ยังไม่ได้ส่งงาน ⚠️'}
                                 </span>
-
-                                <span className="text-[11px] text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md font-medium border border-purple-200">
-                                  {assignment.driveFolderName}
-                                </span>
                               </div>
 
                               <h4 className="text-sm font-bold text-slate-900 leading-snug flex items-center gap-1.5">

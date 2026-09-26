@@ -17,7 +17,9 @@ import {
   CalendarDays,
   Sparkles,
   Plus,
-  Megaphone
+  Megaphone,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { storage } from '../services/storageService';
@@ -86,6 +88,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [calendarYear, setCalendarYear] = useState<number>(now.getFullYear());
   const [calendarMonth, setCalendarMonth] = useState<number>(now.getMonth());
   const [isMonthPickerOpen, setIsMonthPickerOpen] = useState(false);
+  const [isMobileFullscreenCalendar, setIsMobileFullscreenCalendar] = useState(false);
+
+  // Lock body scroll when mobile calendar is in fullscreen mode
+  React.useEffect(() => {
+    if (isMobileFullscreenCalendar) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isMobileFullscreenCalendar]);
 
   // Selected date pop-up modal state
   const [modalDateData, setModalDateData] = useState<{
@@ -636,10 +651,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* 2. MAIN DASHBOARD CONTENT: 2-COLUMN LAYOUT (CALENDAR + 20-DAY UPCOMING NOTICES) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* LEFT COLUMN (8 Cols): INTERACTIVE ACADEMIC CALENDAR */}
-        <div className="lg:col-span-8 bg-white rounded-3xl border border-purple-100 p-5 sm:p-6 shadow-xs space-y-5">
+        <div
+          className={`bg-white transition-all ${
+            isMobileFullscreenCalendar
+              ? 'fixed inset-0 z-50 p-4 pb-20 overflow-y-auto space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200'
+              : 'lg:col-span-8 rounded-3xl border border-purple-100 p-5 sm:p-6 shadow-xs space-y-5'
+          }`}
+        >
           {/* Calendar Header with Navigation Buttons < > and Month/Year Display */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
-            <div className="flex items-center space-x-3.5">
+          <div className="flex items-center justify-between gap-1.5 pb-2.5 sm:pb-4 border-b border-slate-100 w-full">
+            {/* Desktop-only Title & Icon (Hidden on Mobile) */}
+            <div className="hidden sm:flex items-center space-x-3.5">
               <div className="p-3 rounded-2xl bg-purple-100 text-purple-700 shadow-2xs">
                 <CalendarIcon className="w-6 h-6" />
               </div>
@@ -650,29 +672,29 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
             </div>
 
-            {/* Month Selector with < > buttons & Month picker popup */}
-            <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
-              <div className="flex items-center bg-slate-100/90 rounded-2xl p-1 border border-slate-200 shadow-2xs">
+            {/* Month Selector with < > buttons & Month picker popup (Minimal & Compact frame on Mobile) */}
+            <div className="flex items-center gap-1 sm:gap-2">
+              <div className="flex items-center bg-slate-50/70 sm:bg-slate-100/90 rounded-lg sm:rounded-2xl p-0.5 sm:p-1 border border-slate-200/70 sm:border-slate-200 shadow-2xs">
                 <button
                   id="calendar-prev-month-btn"
                   onClick={handlePrevMonth}
                   title="เดือนก่อนหน้า"
-                  className="p-2 hover:bg-white text-slate-700 hover:text-purple-700 rounded-xl transition-all shadow-2xs cursor-pointer"
+                  className="p-1 sm:p-2 hover:bg-white text-slate-600 sm:text-slate-700 hover:text-purple-700 rounded-md sm:rounded-xl transition-all shadow-2xs cursor-pointer"
                 >
-                  <ChevronLeft className="w-5 h-5" />
+                  <ChevronLeft className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
                 </button>
                 <div className="relative">
                   <button
                     type="button"
                     onClick={() => setIsMonthPickerOpen(!isMonthPickerOpen)}
                     title="คลิกเพื่อเลือกเดือนที่ต้องการ"
-                    className="px-3 py-1 text-center min-w-[130px] hover:bg-white/80 rounded-xl transition-colors cursor-pointer group flex items-center justify-center gap-1.5"
+                    className="px-1.5 sm:px-3 py-0.5 sm:py-1 text-center min-w-[84px] sm:min-w-[130px] hover:bg-white/80 rounded-md sm:rounded-xl transition-colors cursor-pointer group flex items-center justify-center gap-1 sm:gap-1.5"
                   >
                     <div>
-                      <span className="text-sm font-bold text-slate-900 block leading-tight group-hover:text-purple-700 transition-colors">
+                      <span className="text-[11px] sm:text-sm font-bold text-slate-900 block leading-tight group-hover:text-purple-700 transition-colors">
                         {currentMonthYearLabel}
                       </span>
-                      <span className="text-[10px] font-medium text-slate-500">
+                      <span className="hidden sm:block text-[10px] font-medium text-slate-500">
                         {calendarMonth === now.getMonth() && calendarYear === now.getFullYear() ? (
                           <span className="text-purple-700 font-bold">(เดือนปัจจุบัน)</span>
                         ) : (
@@ -680,7 +702,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         )}
                       </span>
                     </div>
-                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-purple-600 transition-colors shrink-0" />
+                    <ChevronDown className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 text-slate-400 group-hover:text-purple-600 transition-colors shrink-0" />
                   </button>
 
                   {/* Dropdown Menu for Month Selection */}
@@ -745,9 +767,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   id="calendar-next-month-btn"
                   onClick={handleNextMonth}
                   title="เดือนถัดไป"
-                  className="p-2 hover:bg-white text-slate-700 hover:text-purple-700 rounded-xl transition-all shadow-2xs cursor-pointer"
+                  className="p-1 sm:p-2 hover:bg-white text-slate-600 sm:text-slate-700 hover:text-purple-700 rounded-md sm:rounded-xl transition-all shadow-2xs cursor-pointer"
                 >
-                  <ChevronRight className="w-5 h-5" />
+                  <ChevronRight className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
                 </button>
                 {(calendarMonth !== now.getMonth() || calendarYear !== now.getFullYear()) && (
                   <button
@@ -757,17 +779,32 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       setCalendarMonth(now.getMonth());
                     }}
                     title="กลับสู่เดือนปัจจุบัน"
-                    className="ml-1 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-2xs transition-all cursor-pointer whitespace-nowrap"
+                    className="ml-0.5 sm:ml-1 px-1.5 sm:px-3 py-0.5 sm:py-1.5 rounded-md sm:rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-[9px] sm:text-xs font-bold shadow-2xs transition-all cursor-pointer whitespace-nowrap"
                   >
                     ปัจจุบัน
                   </button>
                 )}
               </div>
             </div>
+
+            {/* Mobile-Only Expand / Fullscreen Toggle Button (Far Top-Right Corner, Icon Only, No Text) */}
+            <button
+              type="button"
+              onClick={() => setIsMobileFullscreenCalendar(!isMobileFullscreenCalendar)}
+              title={isMobileFullscreenCalendar ? "ย่อขนาดปฏิทิน" : "ขยายปฏิทินเต็มหน้าจอ"}
+              aria-label={isMobileFullscreenCalendar ? "ย่อขนาดปฏิทิน" : "ขยายปฏิทินเต็มหน้าจอ"}
+              className="sm:hidden w-7 h-7 flex items-center justify-center rounded-lg border border-purple-200/80 bg-purple-50 hover:bg-purple-100 active:scale-90 text-purple-700 transition-all cursor-pointer shadow-2xs shrink-0 ml-auto"
+            >
+              {isMobileFullscreenCalendar ? (
+                <Minimize2 className="w-3.5 h-3.5 text-purple-700" />
+              ) : (
+                <Maximize2 className="w-3.5 h-3.5 text-purple-700" />
+              )}
+            </button>
           </div>
 
-          {/* Color Indicators Legend Bar */}
-          <div className="flex items-center gap-3 sm:gap-5 flex-wrap text-xs font-semibold text-slate-600 px-3.5 py-2 bg-slate-50/80 rounded-2xl border border-slate-100">
+          {/* Color Indicators Legend Bar (Desktop Only) */}
+          <div className="hidden sm:flex items-center gap-3 sm:gap-5 flex-wrap text-xs font-semibold text-slate-600 px-3.5 py-2 bg-slate-50/80 rounded-2xl border border-slate-100">
             <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
               คำอธิบายสี:
             </span>
@@ -802,7 +839,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             {Array.from({ length: startDayOffset }).map((_, idx) => (
               <div
                 key={`empty-${idx}`}
-                className="h-20 sm:h-24 rounded-2xl bg-slate-50/40 border border-slate-100/50"
+                className={`${isMobileFullscreenCalendar ? 'min-h-[85px] sm:min-h-[96px]' : 'h-20 sm:h-24'} rounded-2xl bg-slate-50/40 border border-slate-100/50`}
               />
             ))}
 
@@ -822,7 +859,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <div
                   key={day.dateString}
                   onClick={() => handleDateClick(day)}
-                  className={`h-20 sm:h-24 p-1.5 sm:p-2 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between relative group hover:shadow-md hover:scale-[1.02] active:scale-[0.98] overflow-hidden ${
+                  className={`${
+                    isMobileFullscreenCalendar ? 'min-h-[85px] sm:min-h-[96px] p-2' : 'h-20 sm:h-24 p-1.5 sm:p-2'
+                  } rounded-2xl border transition-all cursor-pointer flex flex-col justify-between relative group hover:shadow-md hover:scale-[1.02] active:scale-[0.98] overflow-hidden ${
                     day.isToday
                       ? 'border-purple-400 bg-purple-50/40 ring-2 ring-purple-200 shadow-2xs'
                       : day.statusColor === 'red'
@@ -866,6 +905,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       {day.day}
                     </span>
                     <div className="flex items-center gap-1">
+                      {/* Badge if 2 or more tasks/items on this date */}
+                      {(day.assignments.length + day.announcements.length) >= 2 && (
+                        <span
+                          className="text-[9px] font-black bg-purple-700 text-white px-1.5 py-0.5 rounded-full shadow-2xs leading-none"
+                          title={`มี ${day.assignments.length + day.announcements.length} รายการในวันนี้ (${day.assignments.length} งาน)`}
+                        >
+                          {day.assignments.length >= 2 ? `${day.assignments.length} งาน` : `${day.assignments.length + day.announcements.length} รายการ`}
+                        </span>
+                      )}
                       {isUserAdmin && (
                         <button
                           type="button"
@@ -890,7 +938,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   {/* Title / Label text inside cell */}
                   {day.displayTitle || day.label ? (
                     <div
-                      title={day.displayTitle || day.label}
+                      title={
+                        day.assignments.length >= 2
+                          ? day.assignments.map((a, i) => `${i + 1}. ${a.title}`).join(' | ')
+                          : day.displayTitle || day.label
+                      }
                       className={`text-[9px] sm:text-[10px] leading-tight px-1.5 py-0.5 rounded truncate font-bold shadow-2xs z-10 ${
                         day.statusColor === 'red'
                           ? 'bg-rose-500 text-white'
@@ -901,7 +953,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           : 'bg-slate-100 text-slate-700'
                       }`}
                     >
-                      {day.displayTitle || day.label}
+                      {day.assignments.length >= 2 ? `1. ${day.displayTitle}` : (day.displayTitle || day.label)}
                     </div>
                   ) : (
                     <div className="h-1" />
@@ -910,6 +962,37 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               );
             })}
           </div>
+
+          {/* Mobile-Only Color Indicators Legend (Below Calendar Grid) */}
+          <div className="sm:hidden flex items-center justify-around gap-1.5 px-2.5 py-1.5 bg-slate-50/80 rounded-xl border border-slate-100 text-[10.5px] font-semibold text-slate-600 flex-wrap">
+            <div className="flex items-center gap-1">
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-2xs shrink-0" />
+              <span>สีแดง=มีงาน</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-2xs shrink-0" />
+              <span>สีเขียว=ส่งครบ</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shadow-2xs shrink-0" />
+              <span>สีเหลือง=ประกาศ</span>
+            </div>
+          </div>
+
+          {/* Floating Minimize Button when in Mobile Fullscreen (Icon only, no text) */}
+          {isMobileFullscreenCalendar && (
+            <div className="sm:hidden fixed bottom-6 right-6 z-50">
+              <button
+                type="button"
+                onClick={() => setIsMobileFullscreenCalendar(false)}
+                title="ย่อขนาดปฏิทิน"
+                aria-label="ย่อขนาดปฏิทิน"
+                className="w-10 h-10 flex items-center justify-center bg-slate-900/90 hover:bg-slate-900 active:scale-95 text-white rounded-full shadow-2xl backdrop-blur-xs border border-white/20 transition-all cursor-pointer"
+              >
+                <Minimize2 className="w-4 h-4 text-purple-300" />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* RIGHT COLUMN (4 Cols): UPCOMING DEADLINES & OVERDUE (กำหนดส่ง) */}
@@ -1028,207 +1111,264 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* 3. CALENDAR DATE POP-UP MODAL */}
-      {modalDateData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-purple-100 relative max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-              <div className="flex items-center space-x-3 min-w-0 flex-1">
-                <div className="p-2.5 rounded-2xl bg-purple-100 text-purple-700 shrink-0">
-                  <CalendarIcon className="w-5 h-5" />
+      {modalDateData && (() => {
+        const totalModalItems = modalDateData.assignments.length + modalDateData.announcements.length;
+        const hasMultipleModalItems = totalModalItems >= 2;
+        const hasMultipleAssignments = modalDateData.assignments.length >= 2;
+
+        return (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-purple-100 relative max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+                <div className="flex items-center space-x-3 min-w-0 flex-1">
+                  <div className="p-2.5 rounded-2xl bg-purple-100 text-purple-700 shrink-0">
+                    <CalendarIcon className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-base font-black text-slate-900 leading-tight truncate">
+                        รายละเอียดวันที่ {getThaiShortDay(modalDateData.dateStr)} {formatThaiDate(modalDateData.dateStr)}
+                      </h3>
+                      {hasMultipleModalItems && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-purple-700 text-white shadow-2xs">
+                          {hasMultipleAssignments ? `มี ${modalDateData.assignments.length} งาน` : `มี ${totalModalItems} รายการ`}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      {formatThaiFullDate(modalDateData.dateStr)}
+                    </p>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <h3 className="text-base font-black text-slate-900 leading-tight truncate">
-                    รายละเอียดวันที่ {getThaiShortDay(modalDateData.dateStr)} {formatThaiDate(modalDateData.dateStr)}
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    {formatThaiFullDate(modalDateData.dateStr)}
-                  </p>
+
+                <div className="flex items-center gap-2 shrink-0 ml-2">
+                  {isUserAdmin && (
+                    <button
+                      id="calendar-modal-add-btn"
+                      onClick={() => handleOpenPlusModal(modalDateData.dateStr)}
+                      title="มอบหมายงาน หรือ ประกาศแจ้งข่าวสาร (+)"
+                      aria-label="มอบหมายงาน หรือ ประกาศแจ้งข่าวสาร"
+                      className="w-10 h-10 rounded-xl bg-purple-600 hover:bg-purple-700 active:scale-95 text-white flex items-center justify-center transition-all shadow-md shadow-purple-500/25 glow-purple-hover cursor-pointer group relative"
+                    >
+                      <Plus className="w-5 h-5 stroke-[2.5] transition-transform duration-200 group-hover:rotate-90" />
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => setModalDateData(null)}
+                    className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0 ml-2">
-                {isUserAdmin && (
-                  <button
-                    id="calendar-modal-add-btn"
-                    onClick={() => handleOpenPlusModal(modalDateData.dateStr)}
-                    title="มอบหมายงาน หรือ ประกาศแจ้งข่าวสาร (+)"
-                    aria-label="มอบหมายงาน หรือ ประกาศแจ้งข่าวสาร"
-                    className="w-10 h-10 rounded-xl bg-purple-600 hover:bg-purple-700 active:scale-95 text-white flex items-center justify-center transition-all shadow-md shadow-purple-500/25 glow-purple-hover cursor-pointer group relative"
-                  >
-                    <Plus className="w-5 h-5 stroke-[2.5] transition-transform duration-200 group-hover:rotate-90" />
-                  </button>
-                )}
+              {/* Modal Body */}
+              <div className="flex-1 overflow-y-auto py-4 space-y-4">
+                {/* Assignments Section */}
+                {modalDateData.assignments.length > 0 ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                        <span>รายการงานที่เกี่ยวข้อง</span>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-800 border border-purple-200">
+                          {modalDateData.assignments.length} งาน
+                        </span>
+                      </span>
+                      {hasMultipleAssignments && (
+                        <span className="text-[11px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">
+                          มี {modalDateData.assignments.length} งานในวันนี้
+                        </span>
+                      )}
+                    </div>
 
+                    {modalDateData.assignments.map((assignment, index) => {
+                      const assignSubs = submissions.filter((s) => s.assignmentId === assignment.id);
+                      const isSubmittedByMe = userSubmittedAssignmentIds.has(assignment.id);
+                      const isCompletedForMember = isSubmittedByMe || !!assignment.isMarkedCompleted;
+                      const isAllSubmittedForAdmin = !!assignment.isMarkedCompleted || assignSubs.length >= totalApprovedMembersCount;
+
+                      return (
+                        <div
+                          key={assignment.id}
+                          className={`p-4 rounded-2xl bg-slate-50 border space-y-3 relative ${
+                            hasMultipleAssignments ? 'border-purple-200/90 shadow-xs' : 'border-slate-200/80'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="w-full">
+                              <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                                <span
+                                  className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${
+                                    isUserAdmin
+                                      ? isAllSubmittedForAdmin
+                                        ? 'bg-emerald-100 text-emerald-800'
+                                        : 'bg-rose-100 text-rose-800'
+                                      : isCompletedForMember
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : 'bg-rose-100 text-rose-800'
+                                  }`}
+                                >
+                                  {isUserAdmin
+                                    ? assignment.isMarkedCompleted
+                                      ? 'ส่งครบทุกคนแล้ว (กระดาษ/เสร็จสิ้น) ✓'
+                                      : isAllSubmittedForAdmin
+                                      ? 'ส่งครบทุกคนแล้ว ✓'
+                                      : `ส่งแล้ว ${assignSubs.length}/${totalApprovedMembersCount} คน`
+                                    : isSubmittedByMe
+                                    ? 'คุณส่งงานนี้แล้ว ✓'
+                                    : assignment.isMarkedCompleted
+                                    ? 'ส่งครบทุกคนแล้ว (กระดาษ/เสร็จสิ้น) ✓'
+                                    : 'ยังไม่ได้ส่งงาน ⚠️'}
+                                </span>
+
+                                <span className="text-[11px] text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md font-medium border border-purple-200">
+                                  {assignment.driveFolderName}
+                                </span>
+                              </div>
+
+                              <h4 className="text-sm font-bold text-slate-900 leading-snug flex items-center gap-1.5">
+                                {hasMultipleModalItems && (
+                                  <span className="text-purple-700 font-extrabold">{index + 1}.</span>
+                                )}
+                                <span>{assignment.title}</span>
+                              </h4>
+                            </div>
+                          </div>
+
+                          {assignment.description && (
+                            <p className="text-xs text-slate-600 leading-relaxed bg-white p-2.5 rounded-xl border border-slate-100">
+                              {assignment.description}
+                            </p>
+                          )}
+
+                          <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3.5 h-3.5 text-slate-400" />
+                              <span>กำหนดส่ง: {getThaiShortDay(assignment.dueDateEnd)} {formatThaiDate(assignment.dueDateEnd)}</span>
+                            </span>
+                          </div>
+
+                          {/* Action Button */}
+                          <div className="pt-1">
+                            {!isUserAdmin ? (
+                              <button
+                                onClick={() => {
+                                  setModalDateData(null);
+                                  handleSelectTab('assignments');
+                                }}
+                                className="w-full flex items-center justify-center gap-2 py-2 text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 rounded-xl transition-all shadow-xs"
+                              >
+                                <Send className="w-3.5 h-3.5" />
+                                <span>{isSubmittedByMe ? 'ดูงานที่ส่ง / แก้ไข' : 'ไปที่หน้าส่งงานนี้'}</span>
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  setModalDateData(null);
+                                  handleSelectTab('assignments');
+                                }}
+                                className="w-full flex items-center justify-center gap-2 py-2 text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 rounded-xl transition-all shadow-xs"
+                              >
+                                <Users className="w-3.5 h-3.5" />
+                                <span>ไปที่ระบบจัดการงาน</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
+
+                {/* Announcements Section */}
+                {modalDateData.announcements.length > 0 ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                        <span>ประกาศข่าวสารในวันนี้</span>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-900 border border-amber-200">
+                          {modalDateData.announcements.length} รายการ
+                        </span>
+                      </span>
+                      {modalDateData.announcements.length >= 2 && (
+                        <span className="text-[11px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                          มี {modalDateData.announcements.length} ประกาศ
+                        </span>
+                      )}
+                    </div>
+                    {modalDateData.announcements.map((ann, annIdx) => {
+                      const itemNumber = modalDateData.assignments.length + annIdx + 1;
+                      return (
+                        <div
+                          key={ann.id}
+                          className={`p-4 rounded-2xl bg-amber-50/60 border text-amber-950 space-y-2 relative ${
+                            modalDateData.announcements.length >= 2 ? 'border-amber-300 shadow-xs' : 'border-amber-200'
+                          }`}
+                        >
+                          <div className="w-full">
+                            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                              <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300/80">
+                                📢 ประกาศแจ้งข่าวสาร
+                              </span>
+                              {ann.isUrgent && (
+                                <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 border border-rose-200">
+                                  ด่วน
+                                </span>
+                              )}
+                            </div>
+
+                            <h4 className="text-sm font-bold text-slate-900 leading-snug flex items-center gap-1.5">
+                              {hasMultipleModalItems && (
+                                <span className="text-amber-700 font-extrabold">
+                                  {modalDateData.assignments.length > 0 ? itemNumber : annIdx + 1}.
+                                </span>
+                              )}
+                              <span>{ann.title}</span>
+                            </h4>
+                          </div>
+
+                          <p className="text-xs text-slate-700 leading-relaxed bg-white/70 p-2.5 rounded-xl border border-amber-100">
+                            {ann.content}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
+
+                {/* Empty state if nothing on this date */}
+                {modalDateData.assignments.length === 0 && modalDateData.announcements.length === 0 && (
+                  <div className="text-center py-8 space-y-3">
+                    <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center mx-auto border border-purple-100">
+                      <CalendarIcon className="w-6 h-6" />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold text-slate-700">
+                        ไม่มีกำหนดส่งงานหรือประกาศพิเศษในวันนี้
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        วันที่ {getThaiShortDay(modalDateData.dateStr)} {formatThaiDate(modalDateData.dateStr)} เป็นวันปฏิบัติงานตามปกติ
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="pt-3 border-t border-slate-100 flex justify-end">
                 <button
                   onClick={() => setModalDateData(null)}
-                  className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors cursor-pointer"
+                  className="px-5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
                 >
-                  <X className="w-5 h-5" />
+                  ปิดหน้าต่าง
                 </button>
               </div>
             </div>
-
-            {/* Modal Body */}
-            <div className="flex-1 overflow-y-auto py-4 space-y-4">
-              {/* Assignments Section */}
-              {modalDateData.assignments.length > 0 ? (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                      รายการงานที่เกี่ยวข้อง ({modalDateData.assignments.length})
-                    </span>
-                  </div>
-
-                  {modalDateData.assignments.map((assignment) => {
-                    const assignSubs = submissions.filter((s) => s.assignmentId === assignment.id);
-                    const isSubmittedByMe = userSubmittedAssignmentIds.has(assignment.id);
-                    const isCompletedForMember = isSubmittedByMe || !!assignment.isMarkedCompleted;
-                    const isAllSubmittedForAdmin = !!assignment.isMarkedCompleted || assignSubs.length >= totalApprovedMembersCount;
-
-                    return (
-                      <div
-                        key={assignment.id}
-                        className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-3"
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <div className="flex items-center gap-2 mb-1">
-                              <span
-                                className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${
-                                  isUserAdmin
-                                    ? isAllSubmittedForAdmin
-                                      ? 'bg-emerald-100 text-emerald-800'
-                                      : 'bg-rose-100 text-rose-800'
-                                    : isCompletedForMember
-                                    ? 'bg-emerald-100 text-emerald-800'
-                                    : 'bg-rose-100 text-rose-800'
-                                }`}
-                              >
-                                {isUserAdmin
-                                  ? assignment.isMarkedCompleted
-                                    ? 'ส่งครบทุกคนแล้ว (กระดาษ/เสร็จสิ้น) ✓'
-                                    : isAllSubmittedForAdmin
-                                    ? 'ส่งครบทุกคนแล้ว ✓'
-                                    : `ส่งแล้ว ${assignSubs.length}/${totalApprovedMembersCount} คน`
-                                  : isSubmittedByMe
-                                  ? 'คุณส่งงานนี้แล้ว ✓'
-                                  : assignment.isMarkedCompleted
-                                  ? 'ส่งครบทุกคนแล้ว (กระดาษ/เสร็จสิ้น) ✓'
-                                  : 'ยังไม่ได้ส่งงาน ⚠️'}
-                              </span>
-
-                              <span className="text-[11px] text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md font-medium border border-purple-200">
-                                {assignment.driveFolderName}
-                              </span>
-                            </div>
-
-                            <h4 className="text-sm font-bold text-slate-900 leading-snug">
-                              {assignment.title}
-                            </h4>
-                          </div>
-                        </div>
-
-                        {assignment.description && (
-                          <p className="text-xs text-slate-600 leading-relaxed bg-white p-2.5 rounded-xl border border-slate-100">
-                            {assignment.description}
-                          </p>
-                        )}
-
-                        <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
-                          <span className="flex items-center gap-1">
-                            <Clock className="w-3.5 h-3.5 text-slate-400" />
-                            <span>กำหนดส่ง: {getThaiShortDay(assignment.dueDateEnd)} {formatThaiDate(assignment.dueDateEnd)}</span>
-                          </span>
-                        </div>
-
-                        {/* Action Button */}
-                        <div className="pt-1">
-                          {!isUserAdmin ? (
-                            <button
-                              onClick={() => {
-                                setModalDateData(null);
-                                handleSelectTab('assignments');
-                              }}
-                              className="w-full flex items-center justify-center gap-2 py-2 text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 rounded-xl transition-all shadow-xs"
-                            >
-                              <Send className="w-3.5 h-3.5" />
-                              <span>{isSubmittedByMe ? 'ดูงานที่ส่ง / แก้ไข' : 'ไปที่หน้าส่งงานนี้'}</span>
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => {
-                                setModalDateData(null);
-                                handleSelectTab('assignments');
-                              }}
-                              className="w-full flex items-center justify-center gap-2 py-2 text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 rounded-xl transition-all shadow-xs"
-                            >
-                              <Users className="w-3.5 h-3.5" />
-                              <span>ไปที่ระบบจัดการงาน</span>
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : null}
-
-              {/* Announcements Section */}
-              {modalDateData.announcements.length > 0 ? (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                      ประกาศข่าวสารในวันนี้
-                    </span>
-                  </div>
-                  {modalDateData.announcements.map((ann) => (
-                    <div
-                      key={ann.id}
-                      className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200 text-amber-950 space-y-1"
-                    >
-                      <div className="flex items-center gap-2">
-                        <Bell className="w-4 h-4 text-amber-600 shrink-0" />
-                        <h4 className="text-xs font-bold text-slate-900">{ann.title}</h4>
-                      </div>
-                      <p className="text-xs text-slate-700 pl-6 leading-relaxed">
-                        {ann.content}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-
-              {/* Empty state if nothing on this date */}
-              {modalDateData.assignments.length === 0 && modalDateData.announcements.length === 0 && (
-                <div className="text-center py-8 space-y-3">
-                  <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center mx-auto border border-purple-100">
-                    <CalendarIcon className="w-6 h-6" />
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm font-semibold text-slate-700">
-                      ไม่มีกำหนดส่งงานหรือประกาศพิเศษในวันนี้
-                    </p>
-                    <p className="text-xs text-slate-400">
-                      วันที่ {getThaiShortDay(modalDateData.dateStr)} {formatThaiDate(modalDateData.dateStr)} เป็นวันปฏิบัติงานตามปกติ
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Modal Footer */}
-            <div className="pt-3 border-t border-slate-100 flex justify-end">
-              <button
-                onClick={() => setModalDateData(null)}
-                className="px-5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
-              >
-                ปิดหน้าต่าง
-              </button>
-            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* 4. ADMIN PLUS MODAL (Create Assignment or Create Announcement from Calendar) */}
       {isAdminPlusModalOpen && (

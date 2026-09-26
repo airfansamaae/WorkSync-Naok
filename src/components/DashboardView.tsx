@@ -19,7 +19,8 @@ import {
   Plus,
   Megaphone,
   Maximize2,
-  Minimize2
+  Minimize2,
+  Trash2
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { storage } from '../services/storageService';
@@ -615,6 +616,118 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     });
   };
 
+  const handleDeleteAssignment = (assignment: Assignment) => {
+    Swal.fire({
+      title: 'ยืนยันการลบงาน?',
+      text: `คุณต้องการลบ "${assignment.title}" ใช่หรือไม่?`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#E11D48',
+      cancelButtonColor: '#94A3B8',
+      confirmButtonText: 'ลบ',
+      cancelButtonText: 'ยกเลิก',
+    }).then((result) => {
+      if (result.isConfirmed) {
+        storage.deleteAssignment(assignment.id);
+        setModalDateData((prev) => {
+          if (!prev) return null;
+          const nextAssignments = prev.assignments.filter((a) => a.id !== assignment.id);
+          if (nextAssignments.length === 0 && prev.announcements.length === 0) {
+            return null;
+          }
+          return {
+            ...prev,
+            assignments: nextAssignments,
+          };
+        });
+        Swal.fire({
+          icon: 'success',
+          title: 'ลบสำเร็จ',
+          text: 'ลบงานเรียบร้อยแล้ว',
+          timer: 1500,
+          showConfirmButton: false,
+        });
+      }
+    });
+  };
+
+  const handleDeleteAnnouncement = (ann: Announcement) => {
+    Swal.fire({
+      title: 'ยืนยันการลบประกาศ?',
+      text: `คุณต้องการลบ "${ann.title}" ใช่หรือไม่?`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#E11D48',
+      cancelButtonColor: '#94A3B8',
+      confirmButtonText: 'ลบ',
+      cancelButtonText: 'ยกเลิก',
+    }).then((result) => {
+      if (result.isConfirmed) {
+        storage.deleteAnnouncement(ann.id, ann.title);
+        setModalDateData((prev) => {
+          if (!prev) return null;
+          const nextAnnouncements = prev.announcements.filter((a) => a.id !== ann.id);
+          if (prev.assignments.length === 0 && nextAnnouncements.length === 0) {
+            return null;
+          }
+          return {
+            ...prev,
+            announcements: nextAnnouncements,
+          };
+        });
+        Swal.fire({
+          icon: 'success',
+          title: 'ลบสำเร็จ',
+          text: 'ลบประกาศเรียบร้อยแล้ว',
+          timer: 1500,
+          showConfirmButton: false,
+        });
+      }
+    });
+  };
+
+  const handleDeleteDateItems = (day: typeof calendarDays[0]) => {
+    const totalItems = day.assignments.length + day.announcements.length;
+    if (totalItems === 0) return;
+
+    if (totalItems === 1) {
+      if (day.assignments.length === 1) {
+        handleDeleteAssignment(day.assignments[0]);
+      } else {
+        handleDeleteAnnouncement(day.announcements[0]);
+      }
+      return;
+    }
+
+    const htmlButtons = [
+      ...day.assignments.map((a, idx) => `<button id="del-assign-${a.id}" class="w-full text-left p-3 my-1.5 rounded-xl bg-slate-50 hover:bg-rose-50 border border-slate-200 hover:border-rose-300 text-xs font-bold text-slate-800 flex items-center justify-between transition-colors cursor-pointer"><span>${idx + 1}. [งาน] ${a.title}</span><span class="text-rose-600 font-bold">ลบ</span></button>`),
+      ...day.announcements.map((ann, idx) => `<button id="del-ann-${ann.id}" class="w-full text-left p-3 my-1.5 rounded-xl bg-slate-50 hover:bg-rose-50 border border-slate-200 hover:border-rose-300 text-xs font-bold text-slate-800 flex items-center justify-between transition-colors cursor-pointer"><span>${day.assignments.length + idx + 1}. [ประกาศ] ${ann.title}</span><span class="text-rose-600 font-bold">ลบ</span></button>`),
+    ].join('');
+
+    Swal.fire({
+      title: 'เลือกลบรายการในวันนี้',
+      html: `<div class="space-y-1 text-left">${htmlButtons}</div>`,
+      showConfirmButton: false,
+      showCancelButton: true,
+      cancelButtonText: 'ยกเลิก',
+      cancelButtonColor: '#94A3B8',
+      didOpen: () => {
+        day.assignments.forEach((a) => {
+          document.getElementById(`del-assign-${a.id}`)?.addEventListener('click', () => {
+            Swal.close();
+            handleDeleteAssignment(a);
+          });
+        });
+        day.announcements.forEach((ann) => {
+          document.getElementById(`del-ann-${ann.id}`)?.addEventListener('click', () => {
+            Swal.close();
+            handleDeleteAnnouncement(ann);
+          });
+        });
+      },
+    });
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       {/* 1. PROMINENT NOTICE BANNER (Mobile & Desktop: Equal fixed dimensions across all notices) */}
@@ -1054,17 +1167,35 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         </span>
                       )}
                       {isUserAdmin && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleOpenPlusModal(day.dateString);
-                          }}
-                          title={`มอบหมายงาน / ประกาศวันที่ ${formatThaiDate(day.dateString)}`}
-                          className="opacity-0 group-hover:opacity-100 w-5 h-5 rounded-md bg-purple-600 hover:bg-purple-700 text-white flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
-                        >
-                          <Plus className="w-3 h-3 stroke-[2.5]" />
-                        </button>
+                        <div className="flex items-center gap-0.5">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenPlusModal(day.dateString);
+                            }}
+                            title="เพิ่ม"
+                            aria-label="เพิ่ม"
+                            className="opacity-0 group-hover:opacity-100 sm:opacity-0 max-sm:opacity-75 hover:opacity-100 w-5 h-5 rounded-md bg-purple-600 hover:bg-purple-700 text-white flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
+                          >
+                            <Plus className="w-3 h-3 stroke-[2.5]" />
+                          </button>
+
+                          {(day.assignments.length > 0 || day.announcements.length > 0) && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteDateItems(day);
+                              }}
+                              title="ลบ"
+                              aria-label="ลบ"
+                              className="opacity-0 group-hover:opacity-100 sm:opacity-0 max-sm:opacity-75 hover:opacity-100 w-5 h-5 rounded-md bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
+                            >
+                              <Trash2 className="w-3 h-3 stroke-[2]" />
+                            </button>
+                          )}
+                        </div>
                       )}
                       {day.isToday && (
                         <span className="text-[9px] font-black text-purple-700 bg-purple-100 px-1 py-0.2 rounded border border-purple-200 shadow-3xs leading-tight">
@@ -1283,15 +1414,34 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
                 <div className="flex items-center gap-2 shrink-0 ml-2">
                   {isUserAdmin && (
-                    <button
-                      id="calendar-modal-add-btn"
-                      onClick={() => handleOpenPlusModal(modalDateData.dateStr)}
-                      title="มอบหมายงาน หรือ ประกาศแจ้งข่าวสาร (+)"
-                      aria-label="มอบหมายงาน หรือ ประกาศแจ้งข่าวสาร"
-                      className="w-10 h-10 rounded-xl bg-purple-600 hover:bg-purple-700 active:scale-95 text-white flex items-center justify-center transition-all shadow-md shadow-purple-500/25 glow-purple-hover cursor-pointer group relative"
-                    >
-                      <Plus className="w-5 h-5 stroke-[2.5] transition-transform duration-200 group-hover:rotate-90" />
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        id="calendar-modal-add-btn"
+                        onClick={() => handleOpenPlusModal(modalDateData.dateStr)}
+                        title="เพิ่ม"
+                        aria-label="เพิ่ม"
+                        className="w-10 h-10 rounded-xl bg-purple-600 hover:bg-purple-700 active:scale-95 text-white flex items-center justify-center transition-all shadow-md shadow-purple-500/25 glow-purple-hover cursor-pointer group relative"
+                      >
+                        <Plus className="w-5 h-5 stroke-[2.5]" />
+                      </button>
+
+                      {(modalDateData.assignments.length > 0 || modalDateData.announcements.length > 0) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const day = calendarDays.find((d) => d.dateString === modalDateData.dateStr);
+                            if (day) {
+                              handleDeleteDateItems(day);
+                            }
+                          }}
+                          title="ลบ"
+                          aria-label="ลบ"
+                          className="w-10 h-10 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white flex items-center justify-center transition-all shadow-md shadow-rose-500/25 cursor-pointer group relative"
+                        >
+                          <Trash2 className="w-4 h-4 stroke-[2]" />
+                        </button>
+                      )}
+                    </div>
                   )}
 
                   <button
@@ -1337,7 +1487,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="w-full">
-                              <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                              <div className="flex items-center justify-between gap-2 mb-1.5 flex-wrap">
                                 <span
                                   className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${
                                     isUserAdmin
@@ -1361,6 +1511,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                                     ? 'ส่งครบทุกคนแล้ว (กระดาษ/เสร็จสิ้น) ✓'
                                     : 'ยังไม่ได้ส่งงาน ⚠️'}
                                 </span>
+
+                                {isUserAdmin && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteAssignment(assignment)}
+                                    title="ลบ"
+                                    aria-label="ลบ"
+                                    className="w-7 h-7 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 active:scale-95 flex items-center justify-center transition-all cursor-pointer shrink-0"
+                                  >
+                                    <Trash2 className="w-4 h-4 stroke-[2]" />
+                                  </button>
+                                )}
                               </div>
 
                               <h4 className="text-sm font-bold text-slate-900 leading-snug flex items-center gap-1.5">
@@ -1443,14 +1605,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           }`}
                         >
                           <div className="w-full">
-                            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                              <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300/80">
-                                📢 ประกาศแจ้งข่าวสาร
-                              </span>
-                              {ann.isUrgent && (
-                                <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 border border-rose-200">
-                                  ด่วน
+                            <div className="flex items-center justify-between gap-2 mb-1.5 flex-wrap">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300/80">
+                                  📢 ประกาศแจ้งข่าวสาร
                                 </span>
+                                {ann.isUrgent && (
+                                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 border border-rose-200">
+                                    ด่วน
+                                  </span>
+                                )}
+                              </div>
+
+                              {isUserAdmin && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteAnnouncement(ann)}
+                                  title="ลบ"
+                                  aria-label="ลบ"
+                                  className="w-7 h-7 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 active:scale-95 flex items-center justify-center transition-all cursor-pointer shrink-0"
+                                >
+                                  <Trash2 className="w-4 h-4 stroke-[2]" />
+                                </button>
                               )}
                             </div>
 

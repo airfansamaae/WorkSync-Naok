@@ -253,12 +253,114 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const thaiBuddhistYear = calendarYear + 543;
   const currentMonthYearLabel = `${THAI_MONTH_NAMES[calendarMonth]} ${thaiBuddhistYear}`;
 
-  // Build days array with Range Analysis (Start, Middle, End, or Single)
+  // Target members for assignment submission tracking (Approved members)
+  const targetMembers = approvedMembers.length > 0 ? approvedMembers : users.filter((u) => u.role === 'member');
+  const totalTargetCount = targetMembers.length > 0 ? targetMembers.length : 1;
+
+  // 1. Gather all calendar timeline events (Assignments & Announcements) for track analysis
+  interface TimelineEvent {
+    id: string;
+    title: string;
+    startDate: string; // YYYY-MM-DD
+    endDate: string;   // YYYY-MM-DD
+    type: 'assignment' | 'announcement';
+    statusColor: 'red' | 'green' | 'yellow';
+  }
+
+  const timelineEvents: TimelineEvent[] = [];
+
+  assignments.forEach((a) => {
+    const start = a.dueDateStart || a.dueDateEnd || todayStr;
+    const end = a.dueDateEnd || a.dueDateStart || start;
+    let statusColor: 'red' | 'green' = 'red';
+
+    if (isUserAdmin) {
+      const assignSubs = submissions.filter((s) => s.assignmentId === a.id);
+      const isAllSubmitted = !!a.isMarkedCompleted || (
+        targetMembers.length > 0
+          ? assignSubs.length >= targetMembers.length
+          : assignSubs.length > 0
+      );
+      statusColor = isAllSubmitted ? 'green' : 'red';
+    } else {
+      const hasMemberSubmitted = !!a.isMarkedCompleted || submissions.some((s) => s.assignmentId === a.id && s.memberId === currentUser?.id);
+      statusColor = hasMemberSubmitted ? 'green' : 'red';
+    }
+
+    timelineEvents.push({
+      id: `assign-${a.id}`,
+      title: a.title,
+      startDate: start <= end ? start : end,
+      endDate: start <= end ? end : start,
+      type: 'assignment',
+      statusColor,
+    });
+  });
+
+  announcements.forEach((ann) => {
+    const start = ann.dateStart || ann.date || todayStr;
+    const end = ann.dateEnd || ann.date || start;
+    timelineEvents.push({
+      id: `ann-${ann.id}`,
+      title: ann.title,
+      startDate: start <= end ? start : end,
+      endDate: start <= end ? end : start,
+      type: 'announcement',
+      statusColor: 'yellow',
+    });
+  });
+
+  // Sort events so earlier start dates and longer ranges get assigned top tracks consistently
+  timelineEvents.sort((a, b) => {
+    if (a.startDate !== b.startDate) return a.startDate.localeCompare(b.startDate);
+    if (a.endDate !== b.endDate) return b.endDate.localeCompare(a.endDate);
+    return a.id.localeCompare(b.id);
+  });
+
+  // Greedy track allocation (Interval Coloring) so overlapping ranges stack neatly below each other
+  const trackEndDates: string[] = [];
+  const eventTrackMap = new Map<string, number>();
+
+  timelineEvents.forEach((ev) => {
+    let chosenTrack = -1;
+    for (let t = 0; t < trackEndDates.length; t++) {
+      if (trackEndDates[t] < ev.startDate) {
+        chosenTrack = t;
+        trackEndDates[t] = ev.endDate;
+        break;
+      }
+    }
+    if (chosenTrack === -1) {
+      chosenTrack = trackEndDates.length;
+      trackEndDates.push(ev.endDate);
+    }
+    eventTrackMap.set(ev.id, chosenTrack);
+  });
+
+  interface DayTimelineTrack {
+    trackIndex: number;
+    event: TimelineEvent;
+    isStart: boolean;
+    isEnd: boolean;
+    isSingle: boolean;
+    connectsLeft: boolean;
+    connectsRight: boolean;
+    hasDot: boolean;
+    statusColor: 'red' | 'green' | 'yellow';
+  }
+
+  // Build days array with Range Analysis (Multi-track stacking and continuous connector lines)
   const calendarDays = Array.from({ length: daysInMonth }, (_, i) => {
     const dayNumber = i + 1;
     const formattedMonth = (calendarMonth + 1).toString().padStart(2, '0');
     const formattedDay = dayNumber.toString().padStart(2, '0');
     const dateString = `${calendarYear}-${formattedMonth}-${formattedDay}`;
+
+    // Column index in 7-day grid: (startDayOffset + i) % 7
+    // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+    const colIndex = (startDayOffset + i) % 7;
+    const isStartOfWeek = colIndex === 0;
+    const isEndOfWeek = colIndex === 6;
 
     // Filter assignments matching this date
     const matchedAssignments = assignments.filter((a) => {
@@ -274,8 +376,44 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       return false;
     });
 
-    // Analyze range connections
-    let rangeType: 'start' | 'middle' | 'end' | 'single' | 'none' = 'none';
+    // Active timeline events on this date
+    const activeTimelineEvents = timelineEvents.filter(
+      (ev) => dateString >= ev.startDate && dateString <= ev.endDate
+    );
+
+    // Compute track renderings for this date
+    const tracksForDay: DayTimelineTrack[] = activeTimelineEvents.map((ev) => {
+      const trackIndex = eventTrackMap.get(ev.id) ?? 0;
+      const isStart = dateString === ev.startDate;
+      const isEnd = dateString === ev.endDate;
+      const isSingle = isStart && isEnd;
+
+      // Connects left if the event started before today
+      const connectsLeft = dateString > ev.startDate;
+
+      // Connects right if the event continues after today
+      const connectsRight = dateString < ev.endDate;
+
+      // Show dot on start day, end day, or single day
+      const hasDot = isStart || isEnd || isSingle;
+
+      return {
+        trackIndex,
+        event: ev,
+        isStart,
+        isEnd,
+        isSingle,
+        connectsLeft,
+        connectsRight,
+        hasDot,
+        statusColor: ev.statusColor,
+      };
+    });
+
+    // Sort active tracks by trackIndex ascending (track 0 on top, track 1 below, etc.)
+    tracksForDay.sort((a, b) => a.trackIndex - b.trackIndex);
+
+    // Card background/accent color
     let statusColor: 'red' | 'green' | 'yellow' | 'none' = 'none';
     let label = '';
     let displayTitle = '';
@@ -283,51 +421,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     if (matchedAssignments.length > 0) {
       const assign = matchedAssignments[0];
       displayTitle = assign.title;
-      const start = assign.dueDateStart || assign.dueDateEnd;
-      const end = assign.dueDateEnd;
-
-      if (start && end && start !== end) {
-        if (dateString === start) rangeType = 'start';
-        else if (dateString === end) rangeType = 'end';
-        else if (dateString > start && dateString < end) rangeType = 'middle';
+      if (tracksForDay.some((t) => t.event.type === 'assignment' && t.statusColor === 'red')) {
+        statusColor = 'red';
+        label = 'กำหนดส่ง';
       } else {
-        rangeType = 'single';
-      }
-
-      if (isUserAdmin) {
-        const assignSubs = submissions.filter((s) => s.assignmentId === assign.id);
-        const isAllSubmitted = assign.isMarkedCompleted || assignSubs.length >= totalApprovedMembersCount;
-        if (isAllSubmitted) {
-          statusColor = 'green';
-          label = assign.isMarkedCompleted ? 'ส่งครบ (ยืนยัน)' : 'ส่งครบ';
-        } else {
-          statusColor = 'red';
-          label = `${assignSubs.length}/${totalApprovedMembersCount} คน`;
-        }
-      } else {
-        const isCompletedForMember = assign.isMarkedCompleted || userSubmittedAssignmentIds.has(assign.id);
-        if (isCompletedForMember) {
-          statusColor = 'green';
-          label = 'ส่งแล้ว';
-        } else {
-          statusColor = 'red';
-          label = 'กำหนดส่ง';
-        }
+        statusColor = 'green';
+        label = 'ส่งครบ';
       }
     } else if (matchedAnnouncements.length > 0) {
-      const ann = matchedAnnouncements[0];
-      displayTitle = ann.title;
-      const start = ann.dateStart || ann.date;
-      const end = ann.dateEnd || ann.date;
-
-      if (start && end && start !== end) {
-        if (dateString === start) rangeType = 'start';
-        else if (dateString === end) rangeType = 'end';
-        else if (dateString > start && dateString < end) rangeType = 'middle';
-      } else {
-        rangeType = 'single';
-      }
-
+      displayTitle = matchedAnnouncements[0].title;
       statusColor = 'yellow';
       label = 'ประกาศ';
     }
@@ -335,19 +437,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return {
       day: dayNumber,
       dateString,
+      colIndex,
+      isStartOfWeek,
+      isEndOfWeek,
       statusColor,
-      rangeType,
       label,
       displayTitle,
       assignments: matchedAssignments,
       announcements: matchedAnnouncements,
+      tracks: tracksForDay,
       isToday: dateString === todayStr,
     };
   });
-
-  // Target members for assignment submission tracking (Approved members)
-  const targetMembers = approvedMembers.length > 0 ? approvedMembers : users.filter((u) => u.role === 'member');
-  const totalTargetCount = targetMembers.length > 0 ? targetMembers.length : 1;
 
   // "กำหนดส่ง" List calculation (30-day lookahead + overdue pending submissions)
   // - For Admin: Show assignments arriving in 30 days + overdue assignments where members haven't submitted completely. Disappears immediately once all members have submitted.
@@ -845,56 +946,94 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
             {/* Calendar Days Cards */}
             {calendarDays.map((day) => {
-              const hasEvent = day.statusColor !== 'none';
-              const lineColor =
-                day.statusColor === 'red'
-                  ? 'bg-rose-500'
-                  : day.statusColor === 'green'
-                  ? 'bg-emerald-500'
-                  : day.statusColor === 'yellow'
-                  ? 'bg-amber-500'
-                  : 'bg-purple-400';
+              const hasEvent = day.tracks.length > 0;
 
               return (
                 <div
                   key={day.dateString}
                   onClick={() => handleDateClick(day)}
                   className={`${
-                    isMobileFullscreenCalendar ? 'min-h-[85px] sm:min-h-[96px] p-2' : 'h-20 sm:h-24 p-1.5 sm:p-2'
-                  } rounded-2xl border transition-all cursor-pointer flex flex-col justify-between relative group hover:shadow-md hover:scale-[1.02] active:scale-[0.98] overflow-hidden ${
+                    isMobileFullscreenCalendar ? 'min-h-[85px] sm:min-h-[96px] p-1.5 sm:p-2' : 'h-20 sm:h-24 p-1.5 sm:p-2'
+                  } rounded-2xl border transition-all cursor-pointer flex flex-col justify-between relative group hover:shadow-md hover:border-purple-300 active:scale-[0.99] overflow-visible ${
                     day.isToday
                       ? 'border-purple-400 bg-purple-50/40 ring-2 ring-purple-200 shadow-2xs'
                       : day.statusColor === 'red'
-                      ? 'border-rose-200 bg-rose-50/20 hover:border-rose-400 hover:bg-rose-50/40'
+                      ? 'border-rose-200 bg-rose-50/20 hover:border-rose-400 hover:bg-rose-50/30'
                       : day.statusColor === 'green'
-                      ? 'border-emerald-200 bg-emerald-50/20 hover:border-emerald-400 hover:bg-emerald-50/40'
+                      ? 'border-emerald-200 bg-emerald-50/20 hover:border-emerald-400 hover:bg-emerald-50/30'
                       : day.statusColor === 'yellow'
-                      ? 'border-amber-200 bg-amber-50/20 hover:border-amber-400 hover:bg-amber-50/40'
+                      ? 'border-amber-200 bg-amber-50/20 hover:border-amber-400 hover:bg-amber-50/30'
                       : 'border-slate-100 hover:border-purple-200 hover:bg-slate-50/80 bg-white'
                   }`}
                 >
-                  {/* Range Connection Lines (เส้นเชื่อมช่วงเวลา และหัวท้ายจุด) */}
+                  {/* Timeline Range Connecting Tracks (เส้นเชื่อมช่วงเวลาเนียนติดกันข้ามวัน และซ้อนบรรทัดลงมาเมื่อมีหลายรายการทับซ้อน) */}
                   {hasEvent && (
-                    <div className="absolute top-2.5 left-0 right-0 h-2 flex items-center pointer-events-none px-1">
-                      {/* Left Connector Line */}
-                      {(day.rangeType === 'middle' || day.rangeType === 'end') && (
-                        <div className={`h-1 flex-1 ${lineColor} opacity-75`} />
-                      )}
-                      
-                      {/* Center Point Dot for Start, End, or Single */}
-                      {(day.rangeType === 'start' || day.rangeType === 'end' || day.rangeType === 'single') && (
-                        <div className={`w-3 h-3 rounded-full ${lineColor} ring-2 ring-white shrink-0 mx-auto shadow-2xs`} />
-                      )}
+                    <div className="absolute inset-x-0 top-0 bottom-0 pointer-events-none z-10">
+                      {day.tracks.map((tr) => {
+                        const lineColor =
+                          tr.statusColor === 'red'
+                            ? 'bg-rose-500'
+                            : tr.statusColor === 'green'
+                            ? 'bg-emerald-500'
+                            : 'bg-amber-500';
 
-                      {/* Right Connector Line */}
-                      {(day.rangeType === 'middle' || day.rangeType === 'start') && (
-                        <div className={`h-1 flex-1 ${lineColor} opacity-75`} />
-                      )}
+                        // Multi-track vertical stacking: Track 0 is on top, Track 1 is directly below it
+                        const trackTopClass =
+                          tr.trackIndex === 0
+                            ? 'top-[27px] sm:top-[31px]'
+                            : tr.trackIndex === 1
+                            ? 'top-[37px] sm:top-[43px]'
+                            : 'top-[47px] sm:top-[55px]';
+
+                        // Seamless bridging: extend into the gap by -10px so adjacent cells connect seamlessly with zero gap
+                        const leftBoundary = tr.connectsLeft
+                          ? day.isStartOfWeek
+                            ? '0px'
+                            : '-10px'
+                          : '50%';
+
+                        const rightBoundary = tr.connectsRight
+                          ? day.isEndOfWeek
+                            ? '0px'
+                            : '-10px'
+                          : '50%';
+
+                        return (
+                          <div
+                            key={`${tr.event.id}-${tr.trackIndex}`}
+                            title={`${tr.event.title} (${tr.event.startDate} ถึง ${tr.event.endDate})`}
+                            className={`absolute inset-x-0 ${trackTopClass}`}
+                          >
+                            {/* Seamless Continuous Line Segment */}
+                            {(tr.connectsLeft || tr.connectsRight) && (
+                              <div
+                                className={`absolute h-[3px] ${lineColor} shadow-2xs`}
+                                style={{
+                                  left: leftBoundary,
+                                  right: rightBoundary,
+                                  top: '50%',
+                                  transform: 'translateY(-50%)',
+                                }}
+                              />
+                            )}
+
+                            {/* Center Point Dot for Start, End, or Single */}
+                            {tr.hasDot && (
+                              <div
+                                className={`absolute left-1/2 -translate-x-1/2 -translate-y-1/2 w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full ${lineColor} ring-2 ring-white shadow-2xs z-20`}
+                                style={{
+                                  top: '50%',
+                                }}
+                              />
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
 
                   {/* Day Number */}
-                  <div className="flex items-center justify-between z-10 w-full">
+                  <div className="flex items-center justify-between z-20 w-full">
                     <span
                       className={`text-xs sm:text-sm font-bold w-6 h-6 flex items-center justify-center rounded-full transition-colors ${
                         day.isToday
@@ -943,7 +1082,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           ? day.assignments.map((a, i) => `${i + 1}. ${a.title}`).join(' | ')
                           : day.displayTitle || day.label
                       }
-                      className={`text-[9px] sm:text-[10px] leading-tight px-1.5 py-0.5 rounded truncate font-bold shadow-2xs z-10 ${
+                      className={`text-[9px] sm:text-[10px] leading-tight px-1.5 py-0.5 rounded truncate font-bold shadow-2xs z-20 ${
                         day.statusColor === 'red'
                           ? 'bg-rose-500 text-white'
                           : day.statusColor === 'green'

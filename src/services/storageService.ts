@@ -1476,6 +1476,32 @@ export class StorageService {
     this.notify();
   }
 
+  public reorderDocuments(orderedDocIds: string[]) {
+    const currentDocs = this.getDocuments();
+    const docMap = new Map(currentDocs.map(d => [d.id, d]));
+    const reordered: DocumentItem[] = [];
+
+    // Add in the specified order with updated order index
+    orderedDocIds.forEach((id, index) => {
+      const doc = docMap.get(id);
+      if (doc) {
+        reordered.push({ ...doc, order: index });
+        docMap.delete(id);
+      }
+    });
+
+    // Append any remaining documents that were not part of the active reorder slice
+    docMap.forEach(doc => {
+      reordered.push({ ...doc, order: reordered.length });
+    });
+
+    safeSetLocalStorage(STORAGE_KEYS.DOCUMENTS, reordered);
+    if (reordered.length > 0) {
+      this.broadcastChange('documents', 'update', reordered[0]);
+    }
+    this.notify();
+  }
+
   public deleteDocument(id: string, currentUserId: string, isAdmin: boolean): boolean {
     const docs = this.getDocuments();
     const target = docs.find(d => d.id === id);

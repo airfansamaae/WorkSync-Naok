@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   FolderGit2, 
   Search, 
@@ -264,29 +264,237 @@ export const DocumentCenterView: React.FC<DocumentCenterViewProps> = ({
     });
   };
 
-  // Filtering & Sorting (Pinned documents displayed at the top)
-  const filteredDocs = documents.filter((doc) => {
-    if (selectedCategory !== 'all' && doc.category !== selectedCategory) {
-      return false;
-    }
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const matchTitle = doc.title.toLowerCase().includes(q);
-      const matchNum = (doc.docNumber || '').toLowerCase().includes(q);
-      const matchDesc = (doc.description || '').toLowerCase().includes(q);
-      const matchFileName = doc.file.name.toLowerCase().includes(q);
-      return matchTitle || matchNum || matchDesc || matchFileName;
-    }
-    return true;
-  });
+  // Sort helper taking into account manual order
+  const sortDocs = (list: DocumentItem[]) => {
+    return [...list].sort((a, b) => {
+      const hasOrderA = typeof a.order === 'number';
+      const hasOrderB = typeof b.order === 'number';
+      if (hasOrderA && hasOrderB) {
+        return (a.order as number) - (b.order as number);
+      }
+      if (hasOrderA) return -1;
+      if (hasOrderB) return 1;
+      if (a.isPinned && !b.isPinned) return -1;
+      if (!a.isPinned && b.isPinned) return 1;
+      const dateA = a.pinnedAt || a.issueDate || a.createdAt;
+      const dateB = b.pinnedAt || b.issueDate || b.createdAt;
+      return new Date(dateB).getTime() - new Date(dateA).getTime();
+    });
+  };
 
-  const sortedDocs = [...filteredDocs].sort((a, b) => {
-    if (a.isPinned && !b.isPinned) return -1;
-    if (!a.isPinned && b.isPinned) return 1;
-    const dateA = a.pinnedAt || a.issueDate || a.createdAt;
-    const dateB = b.pinnedAt || b.issueDate || b.createdAt;
-    return new Date(dateB).getTime() - new Date(dateA).getTime();
-  });
+  const getFilteredAndSortedDocs = (allDocs: DocumentItem[]) => {
+    const filtered = allDocs.filter((doc) => {
+      if (selectedCategory !== 'all' && doc.category !== selectedCategory) {
+        return false;
+      }
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchTitle = doc.title.toLowerCase().includes(q);
+        const matchNum = (doc.docNumber || '').toLowerCase().includes(q);
+        const matchDesc = (doc.description || '').toLowerCase().includes(q);
+        const matchFileName = doc.file.name.toLowerCase().includes(q);
+        return matchTitle || matchNum || matchDesc || matchFileName;
+      }
+      return true;
+    });
+
+    return sortDocs(filtered);
+  };
+
+  const [localDocs, setLocalDocs] = useState<DocumentItem[]>(() => getFilteredAndSortedDocs(documents));
+  const localDocsRef = useRef<DocumentItem[]>(localDocs);
+
+  // Drag & Reorder states (supports mobile press-and-hold & desktop mouse drag)
+  const [isDragging, setIsDragging] = useState(false);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const isDraggingRef = useRef(false);
+  const touchStartPos = useRef<{ x: number; y: number } | null>(null);
+  const touchTimerRef = useRef<any>(null);
+  const isTouchDraggingRef = useRef(false);
+  const touchCurrentIndexRef = useRef<number | null>(null);
+  const justDraggedRef = useRef(false);
+
+  useEffect(() => {
+    localDocsRef.current = localDocs;
+  }, [localDocs]);
+
+  useEffect(() => {
+    if (!isDraggingRef.current) {
+      const nextDocs = getFilteredAndSortedDocs(documents);
+      setLocalDocs(nextDocs);
+      localDocsRef.current = nextDocs;
+    }
+  }, [documents, selectedCategory, searchQuery]);
+
+  // Live reordering in local state
+  const reorderList = (fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return;
+    setLocalDocs((prev) => {
+      const updated = [...prev];
+      if (fromIndex >= updated.length || toIndex >= updated.length) return prev;
+      const [moved] = updated.splice(fromIndex, 1);
+      updated.splice(toIndex, 0, moved);
+      localDocsRef.current = updated;
+      return updated;
+    });
+  };
+
+  // Commit reordered sequence to storage silently
+  const commitReorder = (currentVisibleItems: DocumentItem[]) => {
+    if (currentVisibleItems.length === 0) return;
+
+    if (selectedCategory === 'all' && !searchQuery.trim()) {
+      storage.reorderDocuments(currentVisibleItems.map((d) => d.id));
+      return;
+    }
+
+    const allDocs = storage.getDocuments();
+    const visibleIdSet = new Set(currentVisibleItems.map((d) => d.id));
+    const reorderedFullIds: string[] = [];
+    let visibleIndex = 0;
+
+    for (const doc of allDocs) {
+      if (visibleIdSet.has(doc.id)) {
+        reorderedFullIds.push(currentVisibleItems[visibleIndex].id);
+        visibleIndex++;
+      } else {
+        reorderedFullIds.push(doc.id);
+      }
+    }
+
+    storage.reorderDocuments(reorderedFullIds);
+  };
+
+  // HTML5 Drag Handlers (Desktop Mouse)
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    isDraggingRef.current = true;
+    setIsDragging(true);
+    setDraggedIndex(index);
+    touchCurrentIndexRef.current = index;
+    try {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(index));
+    } catch {}
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    try {
+      e.dataTransfer.dropEffect = 'move';
+    } catch {}
+  };
+
+  const handleDragEnter = (targetIndex: number) => {
+    const currentIdx = touchCurrentIndexRef.current;
+    if (currentIdx === null || currentIdx === targetIndex) return;
+    reorderList(currentIdx, targetIndex);
+    setDraggedIndex(targetIndex);
+    touchCurrentIndexRef.current = targetIndex;
+  };
+
+  const handleDragEnd = () => {
+    isDraggingRef.current = false;
+    setIsDragging(false);
+    setDraggedIndex(null);
+    touchCurrentIndexRef.current = null;
+    justDraggedRef.current = true;
+    setTimeout(() => {
+      justDraggedRef.current = false;
+    }, 300);
+
+    commitReorder(localDocsRef.current);
+  };
+
+  // Touch / Mobile Press & Hold Drag Handlers (กดค้างที่รายการ 180ms แล้วลากขึ้น-ลง)
+  const handleTouchStart = (e: React.TouchEvent, index: number) => {
+    if (e.touches.length > 1) return;
+    const touch = e.touches[0];
+    touchStartPos.current = { x: touch.clientX, y: touch.clientY };
+    touchCurrentIndexRef.current = index;
+
+    if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
+    touchTimerRef.current = setTimeout(() => {
+      isTouchDraggingRef.current = true;
+      isDraggingRef.current = true;
+      setIsDragging(true);
+      setDraggedIndex(index);
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        try {
+          navigator.vibrate(40);
+        } catch {}
+      }
+    }, 180);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    const touch = e.touches[0];
+
+    // If moved before timer triggers, cancel hold timer and allow normal page scrolling
+    if (!isTouchDraggingRef.current) {
+      if (touchStartPos.current) {
+        const dx = Math.abs(touch.clientX - touchStartPos.current.x);
+        const dy = Math.abs(touch.clientY - touchStartPos.current.y);
+        if (dx > 8 || dy > 8) {
+          if (touchTimerRef.current) {
+            clearTimeout(touchTimerRef.current);
+            touchTimerRef.current = null;
+          }
+        }
+      }
+      return;
+    }
+
+    // Active dragging: prevent viewport scroll while dragging item
+    if (e.cancelable) {
+      e.preventDefault();
+    }
+
+    // Auto-scroll viewport if near top or bottom of viewport
+    const edgeThreshold = 70;
+    if (touch.clientY < edgeThreshold) {
+      window.scrollBy({ top: -8, behavior: 'auto' });
+    } else if (touch.clientY > window.innerHeight - edgeThreshold) {
+      window.scrollBy({ top: 8, behavior: 'auto' });
+    }
+
+    const elem = document.elementFromPoint(touch.clientX, touch.clientY);
+    const cardElem = elem?.closest('[data-doc-index]');
+    if (cardElem) {
+      const targetIndex = parseInt(cardElem.getAttribute('data-doc-index') || '-1', 10);
+      const currentIdx = touchCurrentIndexRef.current;
+      if (targetIndex >= 0 && currentIdx !== null && targetIndex !== currentIdx) {
+        reorderList(currentIdx, targetIndex);
+        touchCurrentIndexRef.current = targetIndex;
+        setDraggedIndex(targetIndex);
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+          try {
+            navigator.vibrate(20);
+          } catch {}
+        }
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (touchTimerRef.current) {
+      clearTimeout(touchTimerRef.current);
+      touchTimerRef.current = null;
+    }
+
+    if (isTouchDraggingRef.current) {
+      isTouchDraggingRef.current = false;
+      isDraggingRef.current = false;
+      setIsDragging(false);
+      setDraggedIndex(null);
+      touchCurrentIndexRef.current = null;
+      justDraggedRef.current = true;
+      setTimeout(() => {
+        justDraggedRef.current = false;
+      }, 300);
+
+      commitReorder(localDocsRef.current);
+    }
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -380,131 +588,158 @@ export const DocumentCenterView: React.FC<DocumentCenterViewProps> = ({
 
       {/* Document Minimal List View with Spacing between files */}
       <div className="space-y-2.5 sm:space-y-3">
-        {sortedDocs.length === 0 ? (
+        {localDocs.length === 0 ? (
           <div className="bg-white rounded-2xl border border-purple-100 p-8 text-center text-xs text-slate-400 shadow-2xs">
             ไม่พบเอกสารตามเงื่อนไขที่ค้นหา
           </div>
         ) : (
-          sortedDocs.map((doc) => (
-            <div
-              key={doc.id}
-              className={`bg-white rounded-xl sm:rounded-2xl border p-3 sm:py-3 sm:px-4.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all group ${
-                doc.isPinned
-                  ? 'border-amber-300/90 bg-amber-50/20 shadow-xs'
-                  : 'border-purple-100/80 shadow-2xs hover:shadow-xs hover:border-purple-300/80'
-              }`}
-            >
-              {/* Left File Information (Compact & Orderly) */}
-              <div className="flex items-start sm:items-center space-x-3 min-w-0 flex-1">
-                <div
-                  className={`p-2 rounded-xl shrink-0 ${
-                    doc.category === 'order'
-                      ? 'bg-indigo-100 text-indigo-700'
-                      : 'bg-purple-100 text-purple-700'
-                  }`}
+          localDocs.map((doc, index) => {
+            const isCurrentlyDragged = draggedIndex === index;
+            return (
+              <div
+                key={doc.id}
+                data-doc-index={index}
+                data-doc-id={doc.id}
+                draggable={true}
+                onDragStart={(e) => handleDragStart(e, index)}
+                onDragOver={(e) => handleDragOver(e, index)}
+                onDragEnter={() => handleDragEnter(index)}
+                onDragEnd={handleDragEnd}
+                onTouchStart={(e) => handleTouchStart(e, index)}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+                onTouchCancel={handleTouchEnd}
+                style={{
+                  WebkitTouchCallout: 'none',
+                  touchAction: isDragging ? 'none' : 'pan-y',
+                }}
+                className={`bg-white rounded-xl sm:rounded-2xl border p-3 sm:py-3 sm:px-4.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all select-none group ${
+                  isCurrentlyDragged
+                    ? 'border-purple-500 ring-2 ring-purple-300 shadow-md bg-purple-50/40 scale-[1.01] z-20 cursor-grabbing'
+                    : isDragging
+                    ? 'border-purple-200/80 shadow-2xs cursor-grabbing'
+                    : doc.isPinned
+                    ? 'border-amber-300/90 bg-amber-50/20 shadow-xs hover:shadow-xs hover:border-amber-400 cursor-grab'
+                    : 'border-purple-100/80 shadow-2xs hover:shadow-xs hover:border-purple-300/80 cursor-grab'
+                }`}
+              >
+                {/* Left File Information (Compact & Orderly) */}
+                <div className="flex items-start sm:items-center space-x-3 min-w-0 flex-1">
+                  <div
+                    className={`p-2 rounded-xl shrink-0 ${
+                      doc.category === 'order'
+                        ? 'bg-indigo-100 text-indigo-700'
+                        : 'bg-purple-100 text-purple-700'
+                    }`}
+                  >
+                    {doc.category === 'order' ? (
+                      <ScrollText className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+                    ) : (
+                      <BookOpen className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+                    )}
+                  </div>
+
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {doc.isPinned && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs">
+                          <Pin className="w-2.5 h-2.5 fill-amber-700 text-amber-700" />
+                          <span>ปักหมุด</span>
+                        </span>
+                      )}
+
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                          doc.category === 'order'
+                            ? 'bg-indigo-50 text-indigo-800 border border-indigo-200'
+                            : 'bg-purple-50 text-purple-800 border border-purple-200'
+                        }`}
+                      >
+                        {doc.category === 'order' ? 'หนังสือคำสั่ง' : 'เอกสารตัวอย่าง'}
+                      </span>
+
+                      {doc.docNumber && (
+                        <span className="text-[10px] font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                          {doc.docNumber}
+                        </span>
+                      )}
+
+                      <span className="text-[11px] text-slate-400">
+                        {formatThaiDate(doc.issueDate)}
+                      </span>
+                    </div>
+
+                    <h3 className="text-xs sm:text-sm font-bold text-slate-900 leading-snug truncate group-hover:text-purple-950 transition-colors">
+                      {doc.title}
+                    </h3>
+
+                    <div className="flex items-center gap-2.5 text-[10px] sm:text-[11px] text-slate-400">
+                      <span>ดาวน์โหลดแล้ว {doc.downloadCount} ครั้ง</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Action Icons (Preview, Download, Admin Pin/Edit/Delete) */}
+                <div 
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  className="flex items-center gap-1.5 shrink-0 self-end sm:self-center pt-1 sm:pt-0 border-t sm:border-t-0 border-slate-100 w-full sm:w-auto justify-end"
                 >
-                  {doc.category === 'order' ? (
-                    <ScrollText className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
-                  ) : (
-                    <BookOpen className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+                  {/* Preview Icon (Opens authentic original file in new window) */}
+                  <button
+                    onClick={() => onOpenFilePreview(doc.file, doc.title, doc.uploaderName)}
+                    title="เปิดดูไฟล์ต้นฉบับในหน้าต่างใหม่ (เต็มหน้าจอพอดี 100%)"
+                    className="p-1.5 sm:p-2 text-purple-700 hover:bg-purple-100 rounded-lg transition-colors border border-purple-200 cursor-pointer"
+                  >
+                    <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  </button>
+
+                  {/* 1-Click Direct Download */}
+                  <button
+                    onClick={() => handleDownloadDoc(doc)}
+                    title="ดาวน์โหลดไฟล์เอกสารตรง"
+                    className="p-1.5 sm:p-2 text-emerald-700 hover:bg-emerald-100 rounded-lg transition-colors border border-emerald-200 cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  </button>
+
+                  {/* Admin Extra: Pin, Edit & Delete */}
+                  {isAdmin && (
+                    <>
+                      <button
+                        onClick={() => handleTogglePin(doc)}
+                        title={doc.isPinned ? "ยกเลิกการปักหมุดเอกสารนี้" : "ปักหมุดเอกสารนี้ (แสดงด้านบนสุด)"}
+                        className={`p-1.5 sm:p-2 rounded-lg transition-all border cursor-pointer ${
+                          doc.isPinned
+                            ? 'bg-amber-500 text-white border-amber-600 hover:bg-amber-600 shadow-2xs'
+                            : 'text-slate-400 hover:text-amber-600 hover:bg-amber-50 border-slate-200'
+                        }`}
+                      >
+                        <Pin className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${doc.isPinned ? 'fill-white' : ''}`} />
+                      </button>
+
+                      <button
+                        onClick={() => setEditingDoc(doc)}
+                        title="แก้ไขข้อมูลเอกสาร"
+                        className="p-1.5 sm:p-2 text-amber-600 hover:bg-amber-100 rounded-lg transition-colors border border-slate-200 cursor-pointer"
+                      >
+                        <Edit3 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                      </button>
+
+                      <button
+                        onClick={() => handleDeleteDoc(doc.id, doc.title)}
+                        title="ลบเอกสารนี้"
+                        className="p-1.5 sm:p-2 text-rose-500 hover:bg-rose-100 rounded-lg transition-colors border border-slate-200 cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                      </button>
+                    </>
                   )}
                 </div>
-
-                <div className="min-w-0 flex-1 space-y-0.5">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {doc.isPinned && (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs">
-                        <Pin className="w-2.5 h-2.5 fill-amber-700 text-amber-700" />
-                        <span>ปักหมุด</span>
-                      </span>
-                    )}
-
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
-                        doc.category === 'order'
-                          ? 'bg-indigo-50 text-indigo-800 border border-indigo-200'
-                          : 'bg-purple-50 text-purple-800 border border-purple-200'
-                      }`}
-                    >
-                      {doc.category === 'order' ? 'หนังสือคำสั่ง' : 'เอกสารตัวอย่าง'}
-                    </span>
-
-                    {doc.docNumber && (
-                      <span className="text-[10px] font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
-                        {doc.docNumber}
-                      </span>
-                    )}
-
-                    <span className="text-[11px] text-slate-400">
-                      {formatThaiDate(doc.issueDate)}
-                    </span>
-                  </div>
-
-                  <h3 className="text-xs sm:text-sm font-bold text-slate-900 leading-snug truncate group-hover:text-purple-950 transition-colors">
-                    {doc.title}
-                  </h3>
-
-                  <div className="flex items-center gap-2.5 text-[10px] sm:text-[11px] text-slate-400">
-                    <span>ดาวน์โหลดแล้ว {doc.downloadCount} ครั้ง</span>
-                  </div>
-                </div>
               </div>
-
-              {/* Right Action Icons (Preview, Download, Admin Pin/Edit/Delete) */}
-              <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center pt-1 sm:pt-0 border-t sm:border-t-0 border-slate-100 w-full sm:w-auto justify-end">
-                {/* Preview Icon (Opens authentic original file in new window) */}
-                <button
-                  onClick={() => onOpenFilePreview(doc.file, doc.title, doc.uploaderName)}
-                  title="เปิดดูไฟล์ต้นฉบับในหน้าต่างใหม่ (เต็มหน้าจอพอดี 100%)"
-                  className="p-1.5 sm:p-2 text-purple-700 hover:bg-purple-100 rounded-lg transition-colors border border-purple-200 cursor-pointer"
-                >
-                  <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                </button>
-
-                {/* 1-Click Direct Download */}
-                <button
-                  onClick={() => handleDownloadDoc(doc)}
-                  title="ดาวน์โหลดไฟล์เอกสารตรง"
-                  className="p-1.5 sm:p-2 text-emerald-700 hover:bg-emerald-100 rounded-lg transition-colors border border-emerald-200 cursor-pointer"
-                >
-                  <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                </button>
-
-                {/* Admin Extra: Pin, Edit & Delete */}
-                {isAdmin && (
-                  <>
-                    <button
-                      onClick={() => handleTogglePin(doc)}
-                      title={doc.isPinned ? "ยกเลิกการปักหมุดเอกสารนี้" : "ปักหมุดเอกสารนี้ (แสดงด้านบนสุด)"}
-                      className={`p-1.5 sm:p-2 rounded-lg transition-all border cursor-pointer ${
-                        doc.isPinned
-                          ? 'bg-amber-500 text-white border-amber-600 hover:bg-amber-600 shadow-2xs'
-                          : 'text-slate-400 hover:text-amber-600 hover:bg-amber-50 border-slate-200'
-                      }`}
-                    >
-                      <Pin className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${doc.isPinned ? 'fill-white' : ''}`} />
-                    </button>
-
-                    <button
-                      onClick={() => setEditingDoc(doc)}
-                      title="แก้ไขข้อมูลเอกสาร"
-                      className="p-1.5 sm:p-2 text-amber-600 hover:bg-amber-100 rounded-lg transition-colors border border-slate-200 cursor-pointer"
-                    >
-                      <Edit3 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                    </button>
-
-                    <button
-                      onClick={() => handleDeleteDoc(doc.id, doc.title)}
-                      title="ลบเอกสารนี้"
-                      className="p-1.5 sm:p-2 text-rose-500 hover:bg-rose-100 rounded-lg transition-colors border border-slate-200 cursor-pointer"
-                    >
-                      <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 

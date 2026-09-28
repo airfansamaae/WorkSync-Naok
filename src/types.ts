@@ -85,6 +85,7 @@ export interface DocumentItem {
   downloadCount: number;
   isPinned?: boolean;
   pinnedAt?: string;
+  order?: number;
   createdAt: string;
   updatedAt: string;
 }

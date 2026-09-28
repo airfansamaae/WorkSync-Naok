@@ -339,8 +339,9 @@ export const DocumentCenterView: React.FC<DocumentCenterViewProps> = ({
     });
   };
 
-  // Commit reordered sequence to storage silently
+  // Commit reordered sequence to storage silently (Admin only)
   const commitReorder = (currentVisibleItems: DocumentItem[]) => {
+    if (!isAdmin) return;
     if (currentVisibleItems.length === 0) return;
 
     if (selectedCategory === 'all' && !searchQuery.trim()) {
@@ -365,8 +366,9 @@ export const DocumentCenterView: React.FC<DocumentCenterViewProps> = ({
     storage.reorderDocuments(reorderedFullIds);
   };
 
-  // HTML5 Drag Handlers (Desktop Mouse)
+  // HTML5 Drag Handlers (Desktop Mouse) - Restricted to Admin
   const handleDragStart = (e: React.DragEvent, index: number) => {
+    if (!isAdmin) return;
     isDraggingRef.current = true;
     setIsDragging(true);
     setDraggedIndex(index);
@@ -378,6 +380,7 @@ export const DocumentCenterView: React.FC<DocumentCenterViewProps> = ({
   };
 
   const handleDragOver = (e: React.DragEvent, index: number) => {
+    if (!isAdmin) return;
     e.preventDefault();
     try {
       e.dataTransfer.dropEffect = 'move';
@@ -385,6 +388,7 @@ export const DocumentCenterView: React.FC<DocumentCenterViewProps> = ({
   };
 
   const handleDragEnter = (targetIndex: number) => {
+    if (!isAdmin) return;
     const currentIdx = touchCurrentIndexRef.current;
     if (currentIdx === null || currentIdx === targetIndex) return;
     reorderList(currentIdx, targetIndex);
@@ -393,6 +397,7 @@ export const DocumentCenterView: React.FC<DocumentCenterViewProps> = ({
   };
 
   const handleDragEnd = () => {
+    if (!isAdmin) return;
     isDraggingRef.current = false;
     setIsDragging(false);
     setDraggedIndex(null);
@@ -405,8 +410,9 @@ export const DocumentCenterView: React.FC<DocumentCenterViewProps> = ({
     commitReorder(localDocsRef.current);
   };
 
-  // Touch / Mobile Press & Hold Drag Handlers (กดค้างที่รายการ 180ms แล้วลากขึ้น-ลง)
+  // Touch / Mobile Press & Hold Drag Handlers (Admin Only - กดค้างที่รายการ 180ms แล้วลากขึ้น-ลง)
   const handleTouchStart = (e: React.TouchEvent, index: number) => {
+    if (!isAdmin) return;
     if (e.touches.length > 1) return;
     const touch = e.touches[0];
     touchStartPos.current = { x: touch.clientX, y: touch.clientY };
@@ -427,6 +433,7 @@ export const DocumentCenterView: React.FC<DocumentCenterViewProps> = ({
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isAdmin) return;
     const touch = e.touches[0];
 
     // If moved before timer triggers, cancel hold timer and allow normal page scrolling
@@ -600,27 +607,27 @@ export const DocumentCenterView: React.FC<DocumentCenterViewProps> = ({
                 key={doc.id}
                 data-doc-index={index}
                 data-doc-id={doc.id}
-                draggable={true}
-                onDragStart={(e) => handleDragStart(e, index)}
-                onDragOver={(e) => handleDragOver(e, index)}
-                onDragEnter={() => handleDragEnter(index)}
-                onDragEnd={handleDragEnd}
-                onTouchStart={(e) => handleTouchStart(e, index)}
-                onTouchMove={handleTouchMove}
-                onTouchEnd={handleTouchEnd}
-                onTouchCancel={handleTouchEnd}
+                draggable={isAdmin}
+                onDragStart={isAdmin ? (e) => handleDragStart(e, index) : undefined}
+                onDragOver={isAdmin ? (e) => handleDragOver(e, index) : undefined}
+                onDragEnter={isAdmin ? () => handleDragEnter(index) : undefined}
+                onDragEnd={isAdmin ? handleDragEnd : undefined}
+                onTouchStart={isAdmin ? (e) => handleTouchStart(e, index) : undefined}
+                onTouchMove={isAdmin ? handleTouchMove : undefined}
+                onTouchEnd={isAdmin ? handleTouchEnd : undefined}
+                onTouchCancel={isAdmin ? handleTouchEnd : undefined}
                 style={{
-                  WebkitTouchCallout: 'none',
-                  touchAction: isDragging ? 'none' : 'pan-y',
+                  WebkitTouchCallout: isAdmin ? 'none' : 'default',
+                  touchAction: isAdmin && isDragging ? 'none' : 'pan-y',
                 }}
-                className={`bg-white rounded-xl sm:rounded-2xl border p-3 sm:py-3 sm:px-4.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all select-none group ${
-                  isCurrentlyDragged
+                className={`bg-white rounded-xl sm:rounded-2xl border p-3 sm:py-3 sm:px-4.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all ${isAdmin ? 'select-none' : ''} group ${
+                  isAdmin && isCurrentlyDragged
                     ? 'border-purple-500 ring-2 ring-purple-300 shadow-md bg-purple-50/40 scale-[1.01] z-20 cursor-grabbing'
-                    : isDragging
+                    : isAdmin && isDragging
                     ? 'border-purple-200/80 shadow-2xs cursor-grabbing'
                     : doc.isPinned
-                    ? 'border-amber-300/90 bg-amber-50/20 shadow-xs hover:shadow-xs hover:border-amber-400 cursor-grab'
-                    : 'border-purple-100/80 shadow-2xs hover:shadow-xs hover:border-purple-300/80 cursor-grab'
+                    ? `border-amber-300/90 bg-amber-50/20 shadow-xs hover:shadow-xs hover:border-amber-400 ${isAdmin ? 'cursor-grab' : ''}`
+                    : `border-purple-100/80 shadow-2xs hover:shadow-xs hover:border-purple-300/80 ${isAdmin ? 'cursor-grab' : ''}`
                 }`}
               >
                 {/* Left File Information (Compact & Orderly) */}
